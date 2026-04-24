@@ -1058,6 +1058,7 @@ class AttnArgs:
     attn_gate_w: torch.Tensor
     ve_gate_w: torch.Tensor
     train_max_seq_len: torch.Tensor
+    ssmax_logn: torch.Tensor | None  # (num_heads,) per-head SSMax scalar * log(effective_window)
 
 flash_attn_interface = get_kernel('varunneal/flash-attention-3').flash_attn_interface
 
@@ -1089,6 +1090,12 @@ class CausalSelfAttention(nn.Module):
         max_len = train_max_seq_len if self.training else (args.val_batch_size // (grad_accum_steps * world_size))
 
         q, k = norm(q), norm(k) # QK norm @Grad62304977
+
+        # Scalable softmax (SSMax, arXiv:2501.19399): multiply Q by s_h * log(effective_window)
+        # so post-softmax stays sharp as window grows. Applied pre-rotary so it rides the paired
+        # reshape cleanly (scalar per head, broadcasts across head_dim).
+        if attn_args.ssmax_logn is not None:
+            q = q * attn_args.ssmax_logn.view(1, 1, self.num_heads, 1).type_as(q)
 
         if not self.paired:
             q, k = yarn.rotary(q), yarn.rotary(k)
@@ -1235,6 +1242,10 @@ class GPT(nn.Module):
 
         self.post_lambdas = nn.Parameter(torch.ones(num_layers, 2))
 
+        # SSMax per-head learnable scale (arXiv:2501.19399); one scalar per head per attn layer.
+        # Init to 1/log(2048) so s_h * log(window) ≈ 1 at typical windows → near-identity at init.
+        self.ssmax_s = nn.Parameter(torch.full((num_attn_layers, num_heads), 1.0 / math.log(2048.0)))
+
         # Per-layer injection coefficients for x0 and bigram
         self.x0_lambdas = nn.Parameter(torch.zeros(num_layers))
         self.bigram_lambdas = nn.Parameter(0.05 * torch.ones(num_layers))
@@ -1281,6 +1292,7 @@ class GPT(nn.Module):
         post_lambdas_mlp  = self.post_lambdas[:, 1].bfloat16().unbind(0)
         x0_lambdas = self.x0_lambdas.bfloat16().unbind(0)
         bigram_lambdas = self.bigram_lambdas.bfloat16().unbind(0)
+        ssmax_s_per_attn = self.ssmax_s.bfloat16().unbind(0)  # (num_heads,) per attn layer
         ag = self.attn_gate_bank.unbind(0)
         veg = self.ve_gate_bank.unbind(0)
         attn_gates = [*ag[:6], None, *ag[6:]]
@@ -1323,6 +1335,13 @@ class GPT(nn.Module):
         skip_connection = None
         for i in range(self.num_layers):
             yarn = self.yarn_paired_head if i in self.paired_head_layers else self.yarn
+            attn_idx = i - (i > 6) if i != 6 else None
+            # SSMax scale for this layer's effective context size (log(window_size_tokens))
+            if attn_idx is not None and bm_sizes[i] is not None:
+                log_ctx = math.log(max(bm_sizes[i], 2))
+                ssmax_logn = ssmax_s_per_attn[attn_idx] * log_ctx
+            else:
+                ssmax_logn = None
             attn_args = AttnArgs(
                 ve=ve[i],
                 sa_lambdas=sa_lambdas[i],
@@ -1332,10 +1351,10 @@ class GPT(nn.Module):
                 key_offset=key_offset[i],
                 attn_gate_w=attn_gates[i],
                 ve_gate_w=ve_gates[i],
-                train_max_seq_len=train_max_seq_len
+                train_max_seq_len=train_max_seq_len,
+                ssmax_logn=ssmax_logn,
             )
             # Select weights from banks
-            attn_idx = i - (i > 6) if i != 6 else None
             qkvo_w = attn_weights[attn_idx] if attn_idx is not None else None
             c_fc = mlp_fcs[i]
             c_proj = mlp_projs[i]
@@ -1705,6 +1724,7 @@ class TrainingManager():
             "x0_lambdas":     {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "bigram_lambdas": {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "resid_lambdas":  {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 5.0,  "wd_mul": 0.0},
+            "ssmax_s":        {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 5.0,  "wd_mul": 0.0},
             "value_embeds":   {"optim": "adam",    "comms": "sharded",    "adam_betas": [0.75, 0.95], "lr_mul": 75.,  "wd_mul": 5.0},
             "embed":          {"optim": "adam",    "comms": "sharded",    "adam_betas": [0.5,  0.95], "wd_mul": 150.},
         }
@@ -1712,7 +1732,7 @@ class TrainingManager():
         # - Process smaller/faster params first while large reduces complete
         # - lm_head must complete before embed sync (when tied)
         self.work_order = [
-            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas",  # Small, fast
+            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas", "ssmax_s",  # Small, fast
             "value_embeds", "bigram_embed",  # Medium
             "lm_head", "embed",   # lm_head must complete before embed sync (when tied)
             "qk_bank", "vo_bank", "mlp_bank",  # Large, polar express - process last to maximize overlap
