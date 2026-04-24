@@ -1058,6 +1058,8 @@ class AttnArgs:
     attn_gate_w: torch.Tensor
     ve_gate_w: torch.Tensor
     train_max_seq_len: torch.Tensor
+    fox_gate_w: torch.Tensor | None  # FoX (arXiv:2503.02130): (num_heads, 12) gate weights
+    fox_gate_b: torch.Tensor | None  # FoX: (num_heads,) gate bias; init so sigmoid(bias)≈0.99
 
 flash_attn_interface = get_kernel('varunneal/flash-attention-3').flash_attn_interface
 
@@ -1123,10 +1125,34 @@ class CausalSelfAttention(nn.Module):
             seqlens = 2 * seqlens
             max_len = 2 * max_len
 
-        # use flash_attn over flex_attn @varunneal. flash_attn_varlen suggested by @YouJiacheng
-        y = flash_attn_interface.flash_attn_varlen_func(q[0], k[0], v[0], cu_seqlens_q=seqlens, cu_seqlens_k=seqlens,
-                                                        max_seqlen_q=max_len, max_seqlen_k=max_len,
-                                                        causal=True, softmax_scale=yarn.attn_scale, window_size=(bm_size, 0))
+        if attn_args.fox_gate_w is not None and not self.paired:
+            # Forgetting Transformer (arXiv:2503.02130): data-dependent per-head gate g_{i,h},
+            # cumulative log-gate bias log(g_{j+1,h}) + ... + log(g_{i,h}) added to logits[i,j,h].
+            # Reference path — materializes (T,T) attention; use only on a small subset of layers.
+            # gate_logit_{i,h} = linear(x_i[:12], fox_gate_w_h) + fox_gate_b_h
+            gate_logits = F.linear(x[..., :12], attn_args.fox_gate_w) + attn_args.fox_gate_b  # (B, T, H)
+            log_gates = F.logsigmoid(gate_logits)  # (B, T, H), ≤ 0
+            log_cumsum = log_gates.cumsum(dim=1)   # running sum along query axis
+            # bias[i, j] = log_cumsum[i] - log_cumsum[j]  (zero along diagonal; negative for i>j)
+            bias = log_cumsum[:, :, None, :] - log_cumsum[:, None, :, :]  # (B, T_q, T_k, H)
+            bias = bias.permute(0, 3, 1, 2)  # (B, H, T_q, T_k)
+
+            q0 = q[0].transpose(0, 1)  # (H, T, D)
+            k0 = k[0].transpose(0, 1)
+            v0 = v[0].transpose(0, 1)
+            S = (q0 @ k0.transpose(-1, -2)) * yarn.attn_scale  # (H, T, T)
+            S = S + bias[0]
+            T_len = S.size(-1)
+            causal_mask = torch.ones(T_len, T_len, device=S.device, dtype=torch.bool).tril()
+            S = S.masked_fill(~causal_mask, float("-inf"))
+            A = torch.softmax(S, dim=-1)
+            y = (A @ v0).transpose(0, 1)  # (T, H, D)
+            y = y.unsqueeze(0)  # (B=1, T, H, D)
+        else:
+            # use flash_attn over flex_attn @varunneal. flash_attn_varlen suggested by @YouJiacheng
+            y = flash_attn_interface.flash_attn_varlen_func(q[0], k[0], v[0], cu_seqlens_q=seqlens, cu_seqlens_k=seqlens,
+                                                            max_seqlen_q=max_len, max_seqlen_k=max_len,
+                                                            causal=True, softmax_scale=yarn.attn_scale, window_size=(bm_size, 0))
         y = y.view(B, T, self.num_heads, self.head_dim)
         y = y * torch.sigmoid(F.linear(x[..., :12], attn_gate_w)).view(B, T, self.num_heads, 1)
         y = y.contiguous().view(B, T, self.num_heads * self.head_dim) # re-assemble all head outputs side by side
@@ -1168,6 +1194,13 @@ class GPT(nn.Module):
         self.attn_gate_bank = nn.Parameter(torch.zeros(10, num_heads, 12)) # 10 layers
         self.ve_gate_bank = nn.Parameter(torch.zeros(5, num_heads, 12)) # 5 unique gates
         self.gate_filler_nones = [None] * (num_layers - 6)
+
+        # FoX forget-gate weights (arXiv:2503.02130). Shape (num_fox_layers, num_heads, 12).
+        # fox_layer_indices below selects which attn-layer indices get the FoX path.
+        self.fox_layer_indices = [3, 10]  # both long-window layers
+        self.fox_gate_bank = nn.Parameter(torch.zeros(len(self.fox_layer_indices), num_heads, 12))
+        # Bias chosen so sigmoid(bias) ≈ 0.99 at init (near-no-forgetting) per ideation.md §8.
+        self.fox_gate_bank_bias = nn.Parameter(torch.full((len(self.fox_layer_indices), num_heads), 4.6))
 
         # -----------------------------------
         # Parameter banks for sharded optimization, by @chrisjmccormick
@@ -1287,6 +1320,14 @@ class GPT(nn.Module):
         ve_gates = [None, veg[0], veg[1], *self.gate_filler_nones, veg[2], veg[3], veg[4]]
         assert len(attn_gates) == self.num_layers
         assert len(ve_gates) == self.num_layers
+        # Index FoX gate weights per layer (None for non-FoX layers).
+        fox_gates = [None] * self.num_layers
+        fox_gates_b = [None] * self.num_layers
+        fox_w_iter = self.fox_gate_bank.unbind(0)
+        fox_b_iter = self.fox_gate_bank_bias.unbind(0)
+        for slot, li in enumerate(self.fox_layer_indices):
+            fox_gates[li] = fox_w_iter[slot]
+            fox_gates_b[li] = fox_b_iter[slot]
         qk_all = self.qk_bank[:self._num_qk_groups].view(self._num_attn_layers, -1, self.qk_bank.shape[-1])
         vo_flat = self.vo_bank[:self._num_attn_layers * 2].view(self._num_attn_layers, 2, *self.vo_bank.shape[1:]).flatten(1, 2)
         attn_weights = torch.cat([qk_all, vo_flat], dim=1).unbind(0)
@@ -1332,7 +1373,9 @@ class GPT(nn.Module):
                 key_offset=key_offset[i],
                 attn_gate_w=attn_gates[i],
                 ve_gate_w=ve_gates[i],
-                train_max_seq_len=train_max_seq_len
+                train_max_seq_len=train_max_seq_len,
+                fox_gate_w=fox_gates[i],
+                fox_gate_b=fox_gates_b[i],
             )
             # Select weights from banks
             attn_idx = i - (i > 6) if i != 6 else None
@@ -1699,6 +1742,8 @@ class TrainingManager():
             "skip_gate":      {"optim": "adam",    "comms": "replicated", "adam_betas": [0.9,  0.99], "lr_mul": 0.05, "wd_mul": 0.0},
             "attn_gate_bank": {"optim": "adam",    "comms": "replicated", "adam_betas": [0.9,  0.99]},
             "ve_gate_bank":   {"optim": "adam",    "comms": "replicated", "adam_betas": [0.9,  0.99]},
+            "fox_gate_bank":        {"optim": "adam", "comms": "replicated", "adam_betas": [0.9, 0.99]},
+            "fox_gate_bank_bias":   {"optim": "adam", "comms": "replicated", "adam_betas": [0.9, 0.99], "lr_mul": 1.0, "wd_mul": 0.0},
             "lm_head":        {"optim": "adam",    "comms": "sharded",    "adam_betas": [0.5,  0.95], "wd_mul": 150.},
             "bigram_embed":   {"optim": "adam",    "comms": "sharded_sparse", "adam_betas": [0.75, 0.95], "lr_mul": 75.,  "wd_mul": 5.0},
             "post_lambdas":   {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
@@ -1712,7 +1757,7 @@ class TrainingManager():
         # - Process smaller/faster params first while large reduces complete
         # - lm_head must complete before embed sync (when tied)
         self.work_order = [
-            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas",  # Small, fast
+            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "fox_gate_bank", "fox_gate_bank_bias", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas",  # Small, fast
             "value_embeds", "bigram_embed",  # Medium
             "lm_head", "embed",   # lm_head must complete before embed sync (when tied)
             "qk_bank", "vo_bank", "mlp_bank",  # Large, polar express - process last to maximize overlap
