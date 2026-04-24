@@ -722,7 +722,8 @@ __global__ void ce_fwd_bwd_kernel(
     double B_param,
     double C_param,
     double grad_s_param,
-    double grad_scale_param)
+    double grad_scale_param,
+    double z_loss_alpha_param)
 {
   constexpr int VEC_WIDTH = 8;
   constexpr int NUM_FULL_LOADS = VOCAB_SIZE / (BLOCK_SIZE * VEC_WIDTH);
@@ -733,6 +734,7 @@ __global__ void ce_fwd_bwd_kernel(
   float C = (float)C_param;
   float grad_s = (float)grad_s_param;
   float grad_scale = (float)grad_scale_param;
+  float z_loss_alpha = (float)z_loss_alpha_param;
 
   extern __shared__ __nv_bfloat16 smem[];
 
@@ -828,6 +830,8 @@ __global__ void ce_fwd_bwd_kernel(
         }
       }
     }
+    // Z-loss regularization (PaLM/OLMo-2): α · lse² keeps log partition tame
+    total_loss += z_loss_alpha * lse * lse;
     losses[blockIdx.x] = total_loss;
   }
 
@@ -836,6 +840,8 @@ __global__ void ce_fwd_bwd_kernel(
   for (int i = 0; i < n_predict; i++) {
     S_w += mtp_weights[i];
   }
+  // d(α·lse²)/d(logit_i) = 2·α·lse · softmax_i -- fold into the per-logit coefficient
+  float z_loss_coef = 2.0f * z_loss_alpha * lse;
 
   #pragma unroll 4
   for (int i = 0; i < NUM_LOADS; i++) {
@@ -850,7 +856,7 @@ __global__ void ce_fwd_bwd_kernel(
         float z = A * sigmoid_u;
         float p = __expf(z - lse);
 
-        float term1 = S_w * p;
+        float term1 = (S_w + z_loss_coef) * p;
         float term2 = 0.0f;
 
         float grad_z = term1 - term2;
@@ -872,7 +878,7 @@ __global__ void ce_fwd_bwd_kernel(
     float z = A * sigmoid_u;
     float p = __expf(z - lse);
 
-    float term1 = S_w * p;
+    float term1 = (S_w + z_loss_coef) * p;
     float term2 = 0.0f;
 
     #pragma unroll
@@ -917,15 +923,18 @@ def ce_fwd_bwd(
     C: float,
     grad_s: float,
     grad_scale: float,
+    z_loss_alpha: float = 0.0,
 ) -> None:
     grid = (n_rows, 1, 1)
     ce_fwd_bwd_kernel(
         grid,
         (CE_KERNEL_BLOCK_SIZE, 1, 1),
         (logits, targets, mtp_weights, losses, grad_input,
-         n_rows, n_predict, A, B, C, grad_s, grad_scale),
+         n_rows, n_predict, A, B, C, grad_s, grad_scale, z_loss_alpha),
         shared_mem=CE_KERNEL_VOCAB_SIZE * 2,
     )
+
+Z_LOSS_ALPHA = 1e-4  # PaLM/OLMo-2 typical; α·log²(Z) added to CE
 
 class FusedSoftcappedCrossEntropy(torch.autograd.Function):
     @staticmethod
@@ -960,7 +969,7 @@ class FusedSoftcappedCrossEntropy(torch.autograd.Function):
         grad_input = torch.empty((n_rows, n_cols), dtype=torch.float8_e5m2, device=logits.device)
 
         ce_fwd_bwd(logits, targets, mtp_weights, losses, grad_input,
-             n_rows, n_predict, A, B, C, grad_s, grad_scale)
+             n_rows, n_predict, A, B, C, grad_s, grad_scale, Z_LOSS_ALPHA)
 
         ctx.save_for_backward(logits, targets, mtp_weights, lse, x, lm_head_weight, x_f8, w_f8, grad_input)
         ctx.params = (A, B, C, x_s, w_s, grad_s)
