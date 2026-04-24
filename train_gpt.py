@@ -1058,6 +1058,7 @@ class AttnArgs:
     attn_gate_w: torch.Tensor
     ve_gate_w: torch.Tensor
     train_max_seq_len: torch.Tensor
+    selective: bool  # Parameter-free Selective Attention (arXiv:2410.02703) fallback path
 
 flash_attn_interface = get_kernel('varunneal/flash-attention-3').flash_attn_interface
 
@@ -1123,10 +1124,33 @@ class CausalSelfAttention(nn.Module):
             seqlens = 2 * seqlens
             max_len = 2 * max_len
 
-        # use flash_attn over flex_attn @varunneal. flash_attn_varlen suggested by @YouJiacheng
-        y = flash_attn_interface.flash_attn_varlen_func(q[0], k[0], v[0], cu_seqlens_q=seqlens, cu_seqlens_k=seqlens,
-                                                        max_seqlen_q=max_len, max_seqlen_k=max_len,
-                                                        causal=True, softmax_scale=yarn.attn_scale, window_size=(bm_size, 0))
+        if attn_args.selective:
+            # Parameter-free Selective Attention (arXiv:2410.02703): use head 0 as a selection
+            # channel whose score at (i, j) is the "deselect j from all future i" signal, which
+            # accumulates into the lower-triangular mask subtracted from raw logits before softmax.
+            # Reference path — materializes the attention matrix and does NOT use FlashAttention;
+            # use only on a small subset of layers / for ablation.
+            q0 = q[0].transpose(0, 1)  # (H, T, D)
+            k0 = k[0].transpose(0, 1)
+            v0 = v[0].transpose(0, 1)
+            S = (q0 @ k0.transpose(-1, -2)) * yarn.attn_scale  # (H, T, T)
+            T_len = S.size(-1)
+            causal_mask = torch.ones(T_len, T_len, device=S.device, dtype=torch.bool).tril()
+            S = S.masked_fill(~causal_mask, float("-inf"))
+            # Selection score: F_{i,j} = ReLU(S_head0[i, j]) for j < i; cumulate along i-axis
+            F_sel = F.relu(S[0]).masked_fill(~causal_mask, 0.0)  # (T, T)
+            # For each target column j, accumulate deselection from rows > j (strictly later)
+            cum_desel = F_sel.flip(0).cumsum(0).flip(0)  # (T, T) -- col-wise suffix sum over rows
+            # Subtract cumulative deselection (broadcast over heads, along query axis)
+            S = S - cum_desel[None]
+            A = torch.softmax(S, dim=-1)
+            y = (A @ v0).transpose(0, 1)  # (T, H, D)
+            y = y.unsqueeze(0)  # (B=1, T, H, D)
+        else:
+            # use flash_attn over flex_attn @varunneal. flash_attn_varlen suggested by @YouJiacheng
+            y = flash_attn_interface.flash_attn_varlen_func(q[0], k[0], v[0], cu_seqlens_q=seqlens, cu_seqlens_k=seqlens,
+                                                            max_seqlen_q=max_len, max_seqlen_k=max_len,
+                                                            causal=True, softmax_scale=yarn.attn_scale, window_size=(bm_size, 0))
         y = y.view(B, T, self.num_heads, self.head_dim)
         y = y * torch.sigmoid(F.linear(x[..., :12], attn_gate_w)).view(B, T, self.num_heads, 1)
         y = y.contiguous().view(B, T, self.num_heads * self.head_dim) # re-assemble all head outputs side by side
@@ -1321,6 +1345,9 @@ class GPT(nn.Module):
         # ---- Transformer layers ----
         x_backout = None
         skip_connection = None
+        # Selective attention enabled on a minimal subset of non-paired long-window layers.
+        # Path materializes the (T,T) matrix and does not use FlashAttention, so keep this tight.
+        selective_layers = {10}
         for i in range(self.num_layers):
             yarn = self.yarn_paired_head if i in self.paired_head_layers else self.yarn
             attn_args = AttnArgs(
@@ -1332,7 +1359,8 @@ class GPT(nn.Module):
                 key_offset=key_offset[i],
                 attn_gate_w=attn_gates[i],
                 ve_gate_w=ve_gates[i],
-                train_max_seq_len=train_max_seq_len
+                train_max_seq_len=train_max_seq_len,
+                selective=(i in selective_layers and i not in self.paired_head_layers),
             )
             # Select weights from banks
             attn_idx = i - (i > 6) if i != 6 else None
