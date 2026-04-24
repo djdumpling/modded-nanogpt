@@ -1125,26 +1125,33 @@ class CausalSelfAttention(nn.Module):
             max_len = 2 * max_len
 
         if attn_args.selective:
-            # Parameter-free Selective Attention (arXiv:2410.02703): use head 0 as a selection
-            # channel whose score at (i, j) is the "deselect j from all future i" signal, which
-            # accumulates into the lower-triangular mask subtracted from raw logits before softmax.
-            # Reference path — materializes the attention matrix and does NOT use FlashAttention;
-            # use only on a small subset of layers / for ablation.
-            q0 = q[0].transpose(0, 1)  # (H, T, D)
-            k0 = k[0].transpose(0, 1)
+            # Parameter-free Selective Attention (arXiv:2410.02703). For query i attending key j:
+            #     M(i,j) = sum over k in [j, i-1] of ReLU(S_head0[k, j])    (causal prefix, exclusive)
+            # Reference path — materializes (T,T) attention and does NOT use FlashAttention.
+            # Enforces the same doc mask and sliding-window constraints as flash_attn_varlen.
+            q0 = q[0].transpose(0, 1).float()  # (H, T, D) — fp32 for softmax stability
+            k0 = k[0].transpose(0, 1).float()
             v0 = v[0].transpose(0, 1)
-            S = (q0 @ k0.transpose(-1, -2)) * yarn.attn_scale  # (H, T, T)
+            S = (q0 @ k0.transpose(-1, -2)) * yarn.attn_scale  # (H, T, T) fp32
             T_len = S.size(-1)
-            causal_mask = torch.ones(T_len, T_len, device=S.device, dtype=torch.bool).tril()
-            S = S.masked_fill(~causal_mask, float("-inf"))
-            # Selection score: F_{i,j} = ReLU(S_head0[i, j]) for j < i; cumulate along i-axis
-            F_sel = F.relu(S[0]).masked_fill(~causal_mask, 0.0)  # (T, T)
-            # For each target column j, accumulate deselection from rows > j (strictly later)
-            cum_desel = F_sel.flip(0).cumsum(0).flip(0)  # (T, T) -- col-wise suffix sum over rows
-            # Subtract cumulative deselection (broadcast over heads, along query axis)
+            qpos = torch.arange(T_len, device=S.device)
+            causal = qpos[:, None] >= qpos[None, :]
+            window = causal & (qpos[:, None] - qpos[None, :] <= bm_size)
+            # Doc mask from cu_seqlens: each position only attends within its own document.
+            doc_starts = torch.zeros(T_len, dtype=torch.int32, device=S.device)
+            doc_starts[seqlens[1:-1].long()] = 1
+            doc_id = doc_starts.cumsum(0)
+            doc = doc_id[:, None] == doc_id[None, :]
+            mask = window & doc
+            S = S.masked_fill(~mask, float("-inf"))
+            # Deselection score F(k, j) = ReLU(S_head0[k, j]) on the causal/doc-masked support.
+            F_sel = F.relu(S[0]).masked_fill(~mask, 0.0)  # (T, T); -inf → relu gives 0
+            # Causal prefix sum along rows, EXCLUSIVE of the current row:
+            cum_desel = F_sel.cumsum(0) - F_sel
             S = S - cum_desel[None]
+            S = S.masked_fill(~mask, float("-inf"))  # preserve mask after additive penalty
             A = torch.softmax(S, dim=-1)
-            y = (A @ v0).transpose(0, 1)  # (T, H, D)
+            y = (A.to(v0.dtype) @ v0).transpose(0, 1)  # (T, H, D)
             y = y.unsqueeze(0)  # (B=1, T, H, D)
         else:
             # use flash_attn over flex_attn @varunneal. flash_attn_varlen suggested by @YouJiacheng
