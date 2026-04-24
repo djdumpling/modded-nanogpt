@@ -42,6 +42,11 @@ ReLUSqrdMLP = FusedLinearReLUSquareFunction.apply
 
 dynamo.config.recompile_limit = 64
 
+# RACS/Alice structured-Fisher scaffold (ideation_2.md). This is a stand-in using Adafactor-style
+# factored second-moment: for a 2-D param, store (R, C) instead of (R*C). Full Alice adds low-rank
+# Fisher + cosine regularization, which this scaffold omits.
+ALICE_ENABLED = True
+
 # -----------------------------------------------------------------------------
 # Distributed training setup
 rank = int(os.environ["RANK"])
@@ -545,7 +550,12 @@ class NorMuonAndAdam:
                 else:
                     chunk = param
                 exp_avg = torch.zeros_like(chunk, dtype=torch.float32, device=param.device)
-                self.param_states[param] = dict(step=0, exp_avg=exp_avg, exp_avg_sq=torch.zeros_like(exp_avg))
+                state = dict(step=0, exp_avg=exp_avg, exp_avg_sq=torch.zeros_like(exp_avg))
+                # Alice scaffold: for 2-D params add row/col factored second-moment buffers.
+                if ALICE_ENABLED and chunk.ndim == 2:
+                    state["alice_row"] = torch.zeros(chunk.shape[0], dtype=torch.float32, device=chunk.device)
+                    state["alice_col"] = torch.zeros(chunk.shape[1], dtype=torch.float32, device=chunk.device)
+                self.param_states[param] = state
 
             elif p_cfg.optim == "normuon":
                 chunk_shape = (p_cfg.chunk_size, *p_cfg.reshape[1:])
@@ -837,10 +847,27 @@ class NorMuonAndAdam:
         self._step_size_t.fill_(lr * (bias2 ** 0.5 / bias1))
         self._eff_wd_t.fill_(lr * lr * p_cfg.weight_decay * p_cfg.wd_mul)
 
-        NorMuonAndAdam._adam_update_step(
-            p_slice, grad_chunk, p_state["exp_avg"], p_state["exp_avg_sq"],
-            beta1, beta2, p_cfg.eps, self._step_size_t, self._eff_wd_t
-        )
+        if ALICE_ENABLED and grad_chunk.ndim == 2 and "alice_row" in p_state:
+            # Adafactor-style factored variance stand-in for RACS/Alice:
+            # v ≈ outer(row_avg, col_avg) / overall_mean  (rank-1 approx of grad².mean along each axis)
+            g2 = grad_chunk.float().square()
+            p_state["alice_row"].mul_(beta2).add_(g2.mean(dim=1), alpha=1 - beta2)
+            p_state["alice_col"].mul_(beta2).add_(g2.mean(dim=0), alpha=1 - beta2)
+            total = p_state["alice_row"].mean().clamp_min(1e-12)
+            v_approx = (p_state["alice_row"].unsqueeze(1) *
+                        p_state["alice_col"].unsqueeze(0) / total)
+            exp_avg = p_state["exp_avg"]
+            exp_avg.mul_(beta1).add_(grad_chunk, alpha=1 - beta1)
+            # p_state["step"] has already been incremented in the outer _adam_update
+            update = (exp_avg / (v_approx.sqrt().add_(p_cfg.eps))).mul_(self._step_size_t)
+            mask = (update * p_slice) > 0
+            update.addcmul_(p_slice, mask, value=self._eff_wd_t.item())
+            p_slice.add_(other=update, alpha=-1.0)
+        else:
+            NorMuonAndAdam._adam_update_step(
+                p_slice, grad_chunk, p_state["exp_avg"], p_state["exp_avg_sq"],
+                beta1, beta2, p_cfg.eps, self._step_size_t, self._eff_wd_t
+            )
 
         return p_slice
 
