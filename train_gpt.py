@@ -42,6 +42,34 @@ ReLUSqrdMLP = FusedLinearReLUSquareFunction.apply
 
 dynamo.config.recompile_limit = 64
 
+# LAWA/WSM checkpoint-merge (ideation.md §10, arXiv:2306.03241 + arXiv:2507.17634): keep the last
+# CHECKPOINT_BUFFER_SIZE model states snapshotted every CHECKPOINT_INTERVAL steps after
+# CHECKPOINT_START_FRAC of training. WSM_DISABLE_COOLDOWN removes the LR decay phase and replaces
+# it with a weighted merge of these snapshots at eval/end. Weights use 1-sqrt(j/N) per ideation.
+WSM_DISABLE_COOLDOWN = True
+CHECKPOINT_BUFFER_SIZE = 10
+CHECKPOINT_INTERVAL = 50
+CHECKPOINT_START_FRAC = 0.70  # begin snapshotting at 70% of scheduled steps
+
+def merge_checkpoints(checkpoints: list) -> dict:
+    """1-sqrt-weighted average of the last N state_dicts (LAWA/WSM)."""
+    if not checkpoints:
+        return {}
+    N = len(checkpoints)
+    weights = [max(1.0 - (j / N) ** 0.5, 0.0) for j in range(N)][::-1]  # most recent = largest weight
+    total = sum(weights)
+    weights = [w / total for w in weights]
+    merged = {}
+    for k in checkpoints[0]:
+        if not isinstance(checkpoints[0][k], torch.Tensor):
+            merged[k] = checkpoints[0][k]
+            continue
+        acc = torch.zeros_like(checkpoints[0][k], dtype=torch.float32)
+        for w, ckpt in zip(weights, checkpoints):
+            acc.add_(ckpt[k].float(), alpha=w)
+        merged[k] = acc.to(checkpoints[0][k].dtype)
+    return merged
+
 # -----------------------------------------------------------------------------
 # Distributed training setup
 rank = int(os.environ["RANK"])
@@ -1636,6 +1664,10 @@ class TrainingSchedule:
         # learning rate schedule: tied to batch size schedule, with cooldown at the end
         stage, _ = self.lookup(step)
         lr = stage.lr_mul
+        if WSM_DISABLE_COOLDOWN:
+            # WSM (arXiv:2507.17634): no cooldown — full cooldown budget runs at peak LR; decay
+            # is synthesized at eval time via weighted checkpoint merging (see merge_checkpoints).
+            return lr
         cd_start = int(self.scheduled_iterations * (1 - self.cooldown_frac))
         if step >= cd_start:
             t = min(1.0, (step - cd_start) / (self.scheduled_iterations - cd_start))
@@ -1958,9 +1990,16 @@ torch.cuda.synchronize()
 t0 = time.perf_counter()
 # begin training
 train_steps = training_schedule.total_steps
+checkpoint_start_step = int(CHECKPOINT_START_FRAC * training_schedule.scheduled_iterations)
+checkpoint_buffer: list[dict] = []
 for step in range(train_steps + 1):
     last_step = (step == train_steps)
     training_manager.advance_schedule(step)
+    # --------------- LAWA/WSM CHECKPOINT SNAPSHOT -----------------
+    if (step >= checkpoint_start_step and step % CHECKPOINT_INTERVAL == 0 and not last_step):
+        checkpoint_buffer.append({k: v.detach().clone().cpu() for k, v in model.state_dict().items()})
+        if len(checkpoint_buffer) > CHECKPOINT_BUFFER_SIZE:
+            checkpoint_buffer.pop(0)
     # --------------- VALIDATION SECTION -----------------
     if last_step or (args.val_loss_every > 0 and step % args.val_loss_every == 0):
         if last_step:
@@ -1968,6 +2007,16 @@ for step in range(train_steps + 1):
         # stop the clock
         torch.cuda.synchronize()
         training_time_ms += 1000 * (time.perf_counter() - t0)
+        # Merge-at-eval: swap in the checkpoint average for val, restore afterwards.
+        swapped_in = False
+        saved_state = None
+        if last_step and checkpoint_buffer:
+            saved_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            merged = merge_checkpoints(checkpoint_buffer)
+            # Move merged tensors back to device before loading.
+            merged = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in merged.items()}
+            model.load_state_dict(merged)
+            swapped_in = True
         model.eval()
         assert args.val_tokens % args.val_batch_size == 0
         val_steps = grad_accum_steps * args.val_tokens // args.val_batch_size
@@ -1978,6 +2027,8 @@ for step in range(train_steps + 1):
                 inputs, targets, cum_seqlens, bigram_inputs, _ = next(val_loader)
                 val_loss += model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args()).mean()
         val_loss /= val_steps
+        if swapped_in and saved_state is not None:
+            model.load_state_dict(saved_state)
         del val_loader
         dist.reduce(val_loss, 0, op=dist.ReduceOp.AVG)
         print0(f"step:{step}/{train_steps} val_loss:{val_loss:.4f} train_time:{training_time_ms:.0f}ms step_avg:{training_time_ms/max(step, 1):.2f}ms", console=True)
