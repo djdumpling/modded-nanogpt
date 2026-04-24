@@ -1179,7 +1179,10 @@ class GPT(nn.Module):
         num_mlp_layers = num_layers
 
         hdim = num_heads * head_dim
-        mlp_hdim = 4 * model_dim
+        # Hourglass FFN (ideation_2.md): shrink the FFN inner dim from 4·model_dim to 2·model_dim.
+        # Lighter FFN shape has been argued to match or beat the standard FFN up to ~400M scale
+        # while freeing param budget for other levers.
+        mlp_hdim = 2 * model_dim
 
         # QK bank: per-head-pair Muon groups for Q, K weights
         # Each pair of adjacent heads gets its own independent polar express orthogonalization
