@@ -1058,6 +1058,7 @@ class AttnArgs:
     attn_gate_w: torch.Tensor
     ve_gate_w: torch.Tensor
     train_max_seq_len: torch.Tensor
+    gqa_kv_groups: int | None  # if set, K/V are mean-pooled over num_heads/gqa_kv_groups heads (GQA info structure)
 
 flash_attn_interface = get_kernel('varunneal/flash-attention-3').flash_attn_interface
 
@@ -1089,6 +1090,18 @@ class CausalSelfAttention(nn.Module):
         max_len = train_max_seq_len if self.training else (args.val_batch_size // (grad_accum_steps * world_size))
 
         q, k = norm(q), norm(k) # QK norm @Grad62304977
+
+        # GQA-via-averaging (arXiv:2305.13245 applied selectively): shrinks K/V head diversity to
+        # gqa_kv_groups distinct patterns while keeping the full projection, so param count is
+        # unchanged. Meaningful reduction requires a smaller projection, which we leave for a
+        # follow-up (would need separate qk_bank / vo_bank shapes for GQA layers).
+        if attn_args.gqa_kv_groups is not None and not self.paired:
+            g = attn_args.gqa_kv_groups
+            h_per_g = self.num_heads // g
+            k = k.view(B, T, g, h_per_g, self.head_dim).mean(dim=3, keepdim=True) \
+                 .expand(-1, -1, -1, h_per_g, -1).reshape(B, T, self.num_heads, self.head_dim)
+            v = v.view(B, T, g, h_per_g, self.head_dim).mean(dim=3, keepdim=True) \
+                 .expand(-1, -1, -1, h_per_g, -1).reshape(B, T, self.num_heads, self.head_dim)
 
         if not self.paired:
             q, k = yarn.rotary(q), yarn.rotary(k)
@@ -1321,6 +1334,8 @@ class GPT(nn.Module):
         # ---- Transformer layers ----
         x_backout = None
         skip_connection = None
+        # GQA applied to long-window layers only (paired layers skipped due to reshape).
+        long_window_layers = {3, 10}
         for i in range(self.num_layers):
             yarn = self.yarn_paired_head if i in self.paired_head_layers else self.yarn
             attn_args = AttnArgs(
@@ -1332,7 +1347,8 @@ class GPT(nn.Module):
                 key_offset=key_offset[i],
                 attn_gate_w=attn_gates[i],
                 ve_gate_w=ve_gates[i],
-                train_max_seq_len=train_max_seq_len
+                train_max_seq_len=train_max_seq_len,
+                gqa_kv_groups=(2 if i in long_window_layers and i not in self.paired_head_layers else None),
             )
             # Select weights from banks
             attn_idx = i - (i > 6) if i != 6 else None
