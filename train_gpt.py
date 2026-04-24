@@ -1235,6 +1235,15 @@ class GPT(nn.Module):
 
         self.post_lambdas = nn.Parameter(torch.ones(num_layers, 2))
 
+        # Progressive top-depth growth (ideation_2.md): non-learnable gate per layer, 0→1 over
+        # training. Bottom layers start fully on; top layers {8, 9, 10} phase in later.
+        # Externally updated via training_manager.advance_schedule(step).
+        init_gate = torch.ones(num_layers)
+        for top_i in (8, 9, 10):
+            if top_i < num_layers:
+                init_gate[top_i] = 0.0
+        self.register_buffer("depth_gate", init_gate, persistent=False)
+
         # Per-layer injection coefficients for x0 and bigram
         self.x0_lambdas = nn.Parameter(torch.zeros(num_layers))
         self.bigram_lambdas = nn.Parameter(0.05 * torch.ones(num_layers))
@@ -1344,13 +1353,14 @@ class GPT(nn.Module):
             attn = self.attn_paired if i in self.paired_head_layers else self.attn
 
             # Skip attention on layer 6 @YouJiacheng. Instead pull skip connection from prior long window
+            gate_i = self.depth_gate[i].to(x.dtype)
             if i == 6:
                 x = x + skip_gate_out * skip_connection
             else:
                 attn_in = x_backout if x_backout is not None else x
                 attn_out = attn(norm(attn_in), attn_args, qkvo_w)
-                x = resid_lambdas_attn[i] * x + post_lambdas_attn[i] * attn_out + x0_inject[i]
-            x = resid_lambdas_mlp[i] * x + post_lambdas_mlp[i] * ReLUSqrdMLP(norm(x), c_fc, c_proj)
+                x = resid_lambdas_attn[i] * x + gate_i * post_lambdas_attn[i] * attn_out + x0_inject[i]
+            x = resid_lambdas_mlp[i] * x + gate_i * post_lambdas_mlp[i] * ReLUSqrdMLP(norm(x), c_fc, c_proj)
             if i == 3:
                 skip_connection = x
             if i == 7:
@@ -1764,6 +1774,14 @@ class TrainingManager():
         return [start for start, _ in training_schedule.boundaries[1:]]
 
     def advance_schedule(self, step: int):
+        # Progressive top-depth growth (ideation_2.md): phase in top layers 8, 9, 10 at
+        # 25%, 35%, 45% of scheduled training respectively. Each gate goes 0→1 at its threshold.
+        grow_thresholds = {8: 0.25, 9: 0.35, 10: 0.45}
+        scheduled = training_schedule.scheduled_iterations
+        with torch.no_grad():
+            for layer_i, frac in grow_thresholds.items():
+                threshold_step = int(frac * scheduled)
+                self.model.depth_gate[layer_i] = float(step >= threshold_step)
         stage, _ = training_schedule.lookup(step)
         self.ws_short, new_ws_long = stage.window_sizes
         if new_ws_long != self.ws_long:
