@@ -397,7 +397,12 @@ def ba_plus_cAA(A: torch.Tensor, alpha: float, beta: float, out: torch.Tensor):
     return out
 
 # -----------------------------------------------------------------------------
-# Triton kernel for MLP: relu(x @ W1.T)^2, by @andrewbriand, @jrauvola
+# Triton kernel for MLP: leaky_relu(x @ W1.T, α)^2, by @andrewbriand, @jrauvola
+# Set LEAKY_ALPHA=0.0 to reproduce the original ReLU²; non-zero α switches to LeakyReLU(α)².
+
+# Negative-slope coefficient for the squared-leaky-relu activation. α=0 is exact ReLU²;
+# α=0.5 follows parameter-golf (arXiv:2603... LeakyReLU(0.5)²).
+LEAKY_ALPHA = 0.5
 
 @triton.jit
 def linear_relu_square_kernel(a_desc, b_desc, c_desc, aux_desc,
@@ -408,6 +413,7 @@ def linear_relu_square_kernel(a_desc, b_desc, c_desc, aux_desc,
                                  GROUP_SIZE_M: tl.constexpr,
                                  NUM_SMS: tl.constexpr,
                                  FORWARD: tl.constexpr,
+                                 ALPHA: tl.constexpr,
                                  ):
     dtype = tl.bfloat16
     start_pid = tl.program_id(axis=0)
@@ -445,24 +451,25 @@ def linear_relu_square_kernel(a_desc, b_desc, c_desc, aux_desc,
         c0 = acc0.to(dtype)
         if not FORWARD:
             c0_pre = aux_desc.load([offs_am_c, offs_bn_c])
-            c0 = 2 * c0 * tl.where(c0_pre > 0, c0_pre, 0)
+            # d(max(x,αx)²)/dx = 2·max(x,αx)·d(max(x,αx))/dx = 2x·(1 if x>0 else α²)
+            c0 = 2 * c0 * tl.where(c0_pre > 0, c0_pre, ALPHA * ALPHA * c0_pre)
 
         c_desc.store([offs_am_c, offs_bn_c], c0)
 
         if FORWARD:
-            c0_post = tl.maximum(c0, 0)
+            c0_post = tl.maximum(c0, ALPHA * c0)
             c0_post = c0_post * c0_post
             aux_desc.store([offs_am_c, offs_bn_c], c0_post)
 
         c1 = acc1.to(dtype)
         if not FORWARD:
             c1_pre = aux_desc.load([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2])
-            c1 = 2 * c1 * tl.where(c1_pre > 0, c1_pre, 0)
+            c1 = 2 * c1 * tl.where(c1_pre > 0, c1_pre, ALPHA * ALPHA * c1_pre)
 
         c_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], c1)
 
         if FORWARD:
-            c1_post = tl.maximum(c1, 0)
+            c1_post = tl.maximum(c1, ALPHA * c1)
             c1_post = c1_post * c1_post
             aux_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], c1_post)
 
@@ -507,6 +514,7 @@ def linear_relu_square(a, b, aux=None):
         GROUP_SIZE_M=1,
         NUM_SMS=NUM_SMS,
         FORWARD=FORWARD,
+        ALPHA=LEAKY_ALPHA,
         num_stages=num_stages,
         num_warps=num_warps
     )

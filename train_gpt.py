@@ -1224,7 +1224,18 @@ class GPT(nn.Module):
         # Transposed weight storage for faster gradient accumulation
         self.lm_head = CastedLinearT(model_dim, self.vocab_size, use_fp8=use_fp8, x_s=100/448, w_s=1.6/448, grad_s=grad_scale * 0.75/448)
 
-        nn.init.normal_(self.lm_head.weight, mean=0, std=0.005)
+        # Overtone / spectral embedding init: shape the singular values as S_k ∝ k^{-0.5}
+        # rather than the near-flat Marchenko–Pastur spectrum of i.i.d. Gaussian. Rows are
+        # orthonormal (via torch.nn.init.orthogonal_) then scaled by S_k, giving the matrix
+        # singular values exactly |S_k|. Final rescale matches the baseline per-element std 0.005.
+        with torch.no_grad():
+            d, V = self.lm_head.weight.shape
+            W_f32 = torch.empty(d, V, dtype=torch.float32)
+            nn.init.orthogonal_(W_f32)  # rows orthonormal since d <= V
+            S = torch.arange(1, d + 1, dtype=torch.float32).pow_(-0.5)
+            W_f32.mul_(S.unsqueeze(1))
+            W_f32.mul_(0.005 / W_f32.std())
+            self.lm_head.weight.copy_(W_f32.to(self.lm_head.weight.dtype))
 
         self.embed = nn.Embedding(self.vocab_size, model_dim)
         with torch.no_grad():
