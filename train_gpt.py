@@ -1091,18 +1091,6 @@ class CausalSelfAttention(nn.Module):
 
         q, k = norm(q), norm(k) # QK norm @Grad62304977
 
-        # GQA-via-averaging (arXiv:2305.13245 applied selectively): shrinks K/V head diversity to
-        # gqa_kv_groups distinct patterns while keeping the full projection, so param count is
-        # unchanged. Meaningful reduction requires a smaller projection, which we leave for a
-        # follow-up (would need separate qk_bank / vo_bank shapes for GQA layers).
-        if attn_args.gqa_kv_groups is not None and not self.paired:
-            g = attn_args.gqa_kv_groups
-            h_per_g = self.num_heads // g
-            k = k.view(B, T, g, h_per_g, self.head_dim).mean(dim=3, keepdim=True) \
-                 .expand(-1, -1, -1, h_per_g, -1).reshape(B, T, self.num_heads, self.head_dim)
-            v = v.view(B, T, g, h_per_g, self.head_dim).mean(dim=3, keepdim=True) \
-                 .expand(-1, -1, -1, h_per_g, -1).reshape(B, T, self.num_heads, self.head_dim)
-
         if not self.paired:
             q, k = yarn.rotary(q), yarn.rotary(k)
 
@@ -1114,6 +1102,18 @@ class CausalSelfAttention(nn.Module):
                 # gate pattern g(x[:6] + ve[:6]) by @photomz
                 ve_gate_out = 2 * torch.sigmoid(F.linear(torch.cat([x[..., :6], ve[None, ..., :6]], dim=-1), ve_gate_w)).view(B, T, self.num_heads, 1)
                 v = v + ve_gate_out * ve.view_as(v) # @ KoszarskyB & @Grad62304977
+
+            # GQA-via-averaging (arXiv:2305.13245 applied selectively): run AFTER rotary /
+            # key-offset / value-embedding mix so the averaging is the last op on K/V before
+            # attention, otherwise per-head rotary and value-embed additions reintroduce the
+            # per-head diversity we're trying to collapse.
+            if attn_args.gqa_kv_groups is not None:
+                g = attn_args.gqa_kv_groups
+                h_per_g = self.num_heads // g
+                k = k.view(B, T, g, h_per_g, self.head_dim).mean(dim=3, keepdim=True) \
+                     .expand(-1, -1, -1, h_per_g, -1).reshape(B, T, self.num_heads, self.head_dim)
+                v = v.view(B, T, g, h_per_g, self.head_dim).mean(dim=3, keepdim=True) \
+                     .expand(-1, -1, -1, h_per_g, -1).reshape(B, T, self.num_heads, self.head_dim)
 
         else:
             # Paired heads: adjacent heads' queries attend to each other's keys.
