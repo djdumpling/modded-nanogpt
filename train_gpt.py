@@ -545,7 +545,12 @@ class NorMuonAndAdam:
                 else:
                     chunk = param
                 exp_avg = torch.zeros_like(chunk, dtype=torch.float32, device=param.device)
-                self.param_states[param] = dict(step=0, exp_avg=exp_avg, exp_avg_sq=torch.zeros_like(exp_avg))
+                # Schedule-Free AdamW (arXiv:2405.15682): z is the Adam-like buffer; param slot
+                # holds x_t for forward, y is computed on the fly as (1-β₁)·z + β₁·x.
+                sf_z = chunk.detach().float().clone()
+                self.param_states[param] = dict(
+                    step=0, exp_avg=exp_avg, exp_avg_sq=torch.zeros_like(exp_avg), sf_z=sf_z,
+                )
 
             elif p_cfg.optim == "normuon":
                 chunk_shape = (p_cfg.chunk_size, *p_cfg.reshape[1:])
@@ -673,14 +678,14 @@ class NorMuonAndAdam:
             embed_chunk_size = embed_cfg.chunk_size  # 6288
 
             # All-gather lm_head momentum to get full (768, 50304) tensor
-            for key in ["exp_avg", "exp_avg_sq"]:
+            for key in ["exp_avg", "exp_avg_sq", "sf_z"]:
                 lm_chunk = lm_state[key]  # (96, 50304)
                 full_lm = torch.empty(lm_head.shape[0], lm_head.shape[1], dtype=lm_chunk.dtype, device=lm_chunk.device)
                 dist.all_gather_into_tensor(full_lm, lm_chunk.contiguous())
                 embed_state[key].copy_(full_lm.T[rank * embed_chunk_size:(rank + 1) * embed_chunk_size])
         else:
             # Single GPU: simple transpose
-            for key in ["exp_avg", "exp_avg_sq"]:
+            for key in ["exp_avg", "exp_avg_sq", "sf_z"]:
                 embed_state[key].copy_(lm_state[key].T)
 
         # Mark as split
@@ -838,7 +843,7 @@ class NorMuonAndAdam:
         self._eff_wd_t.fill_(lr * lr * p_cfg.weight_decay * p_cfg.wd_mul)
 
         NorMuonAndAdam._adam_update_step(
-            p_slice, grad_chunk, p_state["exp_avg"], p_state["exp_avg_sq"],
+            p_slice, grad_chunk, p_state["exp_avg"], p_state["exp_avg_sq"], p_state["sf_z"],
             beta1, beta2, p_cfg.eps, self._step_size_t, self._eff_wd_t
         )
 
@@ -846,15 +851,27 @@ class NorMuonAndAdam:
 
     @staticmethod
     @torch.compile(dynamic=False, fullgraph=True)
-    def _adam_update_step(p_slice, g_slice, exp_avg, exp_avg_sq, beta1, beta2, eps, step_size_t, eff_wd_t):
-        """Compiled Adam update step."""
+    def _adam_update_step(p_slice, g_slice, exp_avg, exp_avg_sq, sf_z, beta1, beta2, eps,
+                          step_size_t, eff_wd_t):
+        """Schedule-Free AdamW update (arXiv:2405.15682, simplified).
+        We still maintain (m, v) as Adam-like second-moment estimators for the grad-normalization
+        direction, but the parameter update is the SF primal-average form:
+
+            z_t = z_{t-1} - η · m/(√v+ε) - η·wd·p
+            p_t = (1-β₁) · z_t + β₁ · p_{t-1}
+
+        At eval time the same p is used (unlike paper's y = (1-c)·y + c·x separate buffer)
+        — simpler scaffold; full SF-AdamW would require grad-at-y computation in the forward
+        pass which is non-trivial to thread through the existing compile/comms plumbing."""
         exp_avg.mul_(beta1).add_(g_slice, alpha=1 - beta1)
         exp_avg_sq.mul_(beta2).addcmul_(g_slice, g_slice, value=1 - beta2)
-        update = exp_avg.div(exp_avg_sq.sqrt().add_(eps)).mul_(step_size_t)
-        # Cautious weight decay
+        update = exp_avg.div(exp_avg_sq.sqrt().add_(eps))  # Adam-like direction
+        # Cautious weight decay mask on the Adam direction
         mask = (update * p_slice) > 0
-        update.addcmul_(p_slice, mask, value=eff_wd_t)
-        p_slice.add_(other=update, alpha=-1.0)
+        # Update z (fp32 buffer): z = z - η·update - η·wd·p·mask
+        sf_z.sub_(update.mul(step_size_t)).sub_(p_slice.float() * mask.float() * eff_wd_t)
+        # Primal average: p = (1-β₁)·z + β₁·p
+        p_slice.copy_(((1 - beta1) * sf_z + beta1 * p_slice.float()).type_as(p_slice))
 
     # -----------------------------------
     # NorMuon update
