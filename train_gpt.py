@@ -866,6 +866,10 @@ class NorMuonAndAdam:
         p_state = self.param_states[param]
         grad_chunk = grad_chunk.float()  # FP32 for momentum
 
+        # C-Muon (arXiv:2411.16085): cache raw gradient sign before orthogonalization so we
+        # can mask components of the spectral update that disagree with the raw gradient sign.
+        raw_grad_sign = grad_chunk.sign()
+
         self._momentum_t.fill_(p_cfg.momentum)
         self._eff_lr_t.fill_(p_cfg.lr_mul * p_cfg.lr)
         self._eff_wd_t.fill_(p_cfg.wd_mul * p_cfg.weight_decay * p_cfg.lr)
@@ -882,6 +886,9 @@ class NorMuonAndAdam:
         v_chunk = NorMuonAndAdam._apply_normuon_variance_reduction(
             v_chunk, p_state["second_momentum_buffer"], p_cfg.beta2, red_dim
         )
+
+        # C-Muon cautious mask on the orthogonalized update
+        v_chunk.mul_((v_chunk * raw_grad_sign >= 0).to(v_chunk.dtype))
 
         # Update parameter, in place, with cautious weight decay
         param_view = param.data.view(p_cfg.reshape)
