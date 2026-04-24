@@ -42,6 +42,10 @@ ReLUSqrdMLP = FusedLinearReLUSquareFunction.apply
 
 dynamo.config.recompile_limit = 64
 
+# Scion/ScionLight (arXiv:2502.07529): sign-LMO (ℓ∞-dual) update for the Adam bank instead of Adam.
+# Keeps NorMuon untouched on the hidden matrices. Per-group LRs almost certainly need retuning.
+SCION_ADAM_LEG = True
+
 # -----------------------------------------------------------------------------
 # Distributed training setup
 rank = int(os.environ["RANK"])
@@ -837,10 +841,16 @@ class NorMuonAndAdam:
         self._step_size_t.fill_(lr * (bias2 ** 0.5 / bias1))
         self._eff_wd_t.fill_(lr * lr * p_cfg.weight_decay * p_cfg.wd_mul)
 
-        NorMuonAndAdam._adam_update_step(
-            p_slice, grad_chunk, p_state["exp_avg"], p_state["exp_avg_sq"],
-            beta1, beta2, p_cfg.eps, self._step_size_t, self._eff_wd_t
-        )
+        if SCION_ADAM_LEG:
+            NorMuonAndAdam._sign_momentum_step(
+                p_slice, grad_chunk, p_state["exp_avg"],
+                beta1, self._step_size_t, self._eff_wd_t
+            )
+        else:
+            NorMuonAndAdam._adam_update_step(
+                p_slice, grad_chunk, p_state["exp_avg"], p_state["exp_avg_sq"],
+                beta1, beta2, p_cfg.eps, self._step_size_t, self._eff_wd_t
+            )
 
         return p_slice
 
@@ -852,6 +862,18 @@ class NorMuonAndAdam:
         exp_avg_sq.mul_(beta2).addcmul_(g_slice, g_slice, value=1 - beta2)
         update = exp_avg.div(exp_avg_sq.sqrt().add_(eps)).mul_(step_size_t)
         # Cautious weight decay
+        mask = (update * p_slice) > 0
+        update.addcmul_(p_slice, mask, value=eff_wd_t)
+        p_slice.add_(other=update, alpha=-1.0)
+
+    @staticmethod
+    @torch.compile(dynamic=False, fullgraph=True)
+    def _sign_momentum_step(p_slice, g_slice, exp_avg, beta1, step_size_t, eff_wd_t):
+        """Scion/ScionLight sign-LMO update (arXiv:2502.07529): momentum-then-sign, fixed step.
+        Used in place of Adam for the ℓ∞-dual "sign-LMO" groups on the Adam bank. exp_avg_sq
+        is left untouched (the Scion update does not use per-entry variance)."""
+        exp_avg.mul_(beta1).add_(g_slice, alpha=1 - beta1)
+        update = exp_avg.sign().mul_(step_size_t)
         mask = (update * p_slice) > 0
         update.addcmul_(p_slice, mask, value=eff_wd_t)
         p_slice.add_(other=update, alpha=-1.0)
