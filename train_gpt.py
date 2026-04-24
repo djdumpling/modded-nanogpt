@@ -166,9 +166,9 @@ polar_express_coeffs = [
     (2.3465413258596377, -1.7097828382687081, 0.42323551169305323)
 ]
 
-@torch.compile(dynamic=False, fullgraph=True) # Must use dynamic=False or else it's much slower
 DION_ENABLED = True  # Dion power-iteration orthogonalizer (arXiv:2504.05295)
 
+@torch.compile(dynamic=False, fullgraph=True) # Must use dynamic=False or else it's much slower
 def polar_express(grad_chunk: torch.Tensor, momentum_buffer: torch.Tensor, momentum_t: torch.Tensor,
                   split_baddbmm: bool = False):
     """
@@ -195,23 +195,13 @@ def polar_express(grad_chunk: torch.Tensor, momentum_buffer: torch.Tensor, momen
     X = X.contiguous()
 
     if DION_ENABLED:
-        # Dion power iteration (scaffold, no error feedback, no persistent U):
-        #   V_r = qr(X.T @ X)   (wide case starts from X.T)
-        #   U_r = qr(X @ V_r)
-        #   orthogonal polar factor ≈ U_r @ V_r.T
-        # qr on bf16 is unsupported; promote to fp32 just for the QR step.
+        # Dion scaffold: compute the EXACT polar factor via SVD and return it. This is what
+        # Dion's power iteration converges to at full rank; the scaffold skips the iterative
+        # / persistent-U / error-feedback machinery and just solves it directly.
+        # svd on bf16 is unsupported; promote to fp32 just for the SVD step.
         Xf = X.float()
-        if is_tall:
-            V = Xf.mT @ Xf
-            V, _ = torch.linalg.qr(V)
-            U = Xf @ V
-            U, _ = torch.linalg.qr(U)
-        else:
-            U = Xf @ Xf.mT
-            U, _ = torch.linalg.qr(U)
-            V = Xf.mT @ U
-            V, _ = torch.linalg.qr(V)
-        return (U @ V.mT).to(X.dtype)
+        U, _S, Vh = torch.linalg.svd(Xf, full_matrices=False)
+        return (U @ Vh).to(X.dtype)
 
     if is_tall:
         # Tall: use Triton kernels with X^T @ X (small) and right multiplication
