@@ -539,9 +539,11 @@ class NorMuonAndAdam:
         """Initialize optimizer state for all parameters."""
         for param, p_cfg in self.param_cfgs.items():
             if p_cfg.optim == "adam":
-                # Sharded params use chunk state, replicated use full state
+                # Sharded params use chunk state, replicated use full state. For sharded state we
+                # need each rank's OWN slice of the param (used as the sf_z init), not slice [0].
+                my_rank = dist.get_rank() if dist.is_initialized() else 0
                 if p_cfg.comms.startswith("sharded"):
-                    chunk = param[:p_cfg.chunk_size]
+                    chunk = param[my_rank * p_cfg.chunk_size:(my_rank + 1) * p_cfg.chunk_size]
                 else:
                     chunk = param
                 exp_avg = torch.zeros_like(chunk, dtype=torch.float32, device=param.device)
