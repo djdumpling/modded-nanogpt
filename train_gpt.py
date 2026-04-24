@@ -979,9 +979,14 @@ class CastedLinearT(nn.Module):
 # PyTorch nn.Module definitions for the model
 
 class Yarn(nn.Module):
-    def __init__(self, head_dim, max_seq_len, paired=False):
+    def __init__(self, head_dim, max_seq_len, paired=False, rotating_head_dim=None):
         super().__init__()
         self.head_dim = head_dim
+        # Number of head dimensions that receive a rotary embedding. Remaining `head_dim - rotating_head_dim`
+        # dims are stationary (angular_freq=0). Default preserves the existing half-truncate behavior.
+        # Must be even (rotary treats dims in pairs).
+        self.rotating_head_dim = head_dim // 2 if rotating_head_dim is None else rotating_head_dim
+        assert self.rotating_head_dim % 2 == 0 and 0 <= self.rotating_head_dim <= head_dim
         self.max_seq_len = max_seq_len
         self.paired = paired
         self.reset()
@@ -996,10 +1001,11 @@ class Yarn(nn.Module):
         return factor1 * x_BTHD + factor2 * x_flip
 
     def reset(self):
-        angular_freq = (1 / 1024) ** torch.linspace(0, 1, steps=self.head_dim//4, dtype=torch.float32, device=device)
+        # Parameter-golf-style partial RoPE: size of the rotating block is configurable.
+        angular_freq = (1 / 1024) ** torch.linspace(0, 1, steps=self.rotating_head_dim//2, dtype=torch.float32, device=device)
         angular_freq = angular_freq.repeat_interleave(2)
         # half-truncate RoPE by @YouJiacheng (w/ base freq tuning)
-        angular_freq = torch.cat([angular_freq, angular_freq.new_zeros(self.head_dim//2)])
+        angular_freq = torch.cat([angular_freq, angular_freq.new_zeros(self.head_dim - self.rotating_head_dim)])
         t = torch.arange(2*self.max_seq_len, dtype=torch.float32, device=device)
         if not self.paired:
             theta = torch.outer(t, angular_freq)
@@ -1095,7 +1101,8 @@ class CausalSelfAttention(nn.Module):
 
             if key_offset:
                 # shift keys forward for the stationary head dims. Enables 1-layer induction.
-                k[:, 1:, :, self.head_dim // 2:] = k[:, :-1, :, self.head_dim // 2:]
+                # Uses the rotating-dim boundary from yarn so this scales with the partial-RoPE setting.
+                k[:, 1:, :, yarn.rotating_head_dim:] = k[:, :-1, :, yarn.rotating_head_dim:]
 
             if ve is not None:
                 # gate pattern g(x[:6] + ve[:6]) by @photomz
@@ -1148,7 +1155,7 @@ class ForwardScheduleConfig:
     train_max_seq_len: int
 
 class GPT(nn.Module):
-    def __init__(self, vocab_size: int, num_layers: int, num_heads: int, head_dim: int, model_dim: int, max_seq_len: int):
+    def __init__(self, vocab_size: int, num_layers: int, num_heads: int, head_dim: int, model_dim: int, max_seq_len: int, rotating_head_dim: int | None = None):
         super().__init__()
         self.num_layers = num_layers
         self.vocab_size = next_multiple_of_n(vocab_size, n=128)
@@ -1216,8 +1223,8 @@ class GPT(nn.Module):
         self.paired_head_layers = [0, 2, 5, 9]
         self.attn = CausalSelfAttention(model_dim, head_dim, num_heads, paired=False)
         self.attn_paired = CausalSelfAttention(model_dim, head_dim, num_heads, paired=True)
-        self.yarn = Yarn(head_dim, max_seq_len)
-        self.yarn_paired_head = Yarn(head_dim, max_seq_len, paired=True)
+        self.yarn = Yarn(head_dim, max_seq_len, rotating_head_dim=rotating_head_dim)
+        self.yarn_paired_head = Yarn(head_dim, max_seq_len, paired=True, rotating_head_dim=rotating_head_dim)
         # there are only 50257 unique GPT-2 tokens; we extend to nearest multiple of 128 for efficiency.
         # suggested to me by @Grad62304977. this originates from Karpathy's experiments.
         use_fp8 = not os.environ.get("DISABLE_FP8", False)
@@ -1891,7 +1898,11 @@ model: nn.Module = GPT(
     num_heads=6,
     head_dim=128,
     model_dim=768,
-    max_seq_len=args.val_batch_size // (grad_accum_steps * world_size)
+    max_seq_len=args.val_batch_size // (grad_accum_steps * world_size),
+    # Rotary-dim sweep knob. Baseline is head_dim // 2 = 64 (50% rotating). Parameter-golf
+    # records use 16/64 ≈ 25%. Try values in {32, 48, 64, 80, 96} (must be even).
+    # Non-rotating dims retain the partial-key-offset 1-layer-induction trick.
+    rotating_head_dim=64,
 ).cuda()
 for m in model.modules():
     if isinstance(m, (nn.Embedding, nn.Linear)):
