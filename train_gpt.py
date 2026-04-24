@@ -544,7 +544,9 @@ class NorMuonAndAdam:
                     chunk = param[:p_cfg.chunk_size]
                 else:
                     chunk = param
-                exp_avg = torch.zeros_like(chunk, dtype=torch.float32, device=param.device)
+                # Adam moments stored as bf16 with stochastic rounding on update (arXiv:2502.20566).
+                # Halves state memory for the AdamW legs at ~no measured loss-quality cost per llm.c PR #772.
+                exp_avg = torch.zeros_like(chunk, dtype=torch.bfloat16, device=param.device)
                 self.param_states[param] = dict(step=0, exp_avg=exp_avg, exp_avg_sq=torch.zeros_like(exp_avg))
 
             elif p_cfg.optim == "normuon":
@@ -847,14 +849,22 @@ class NorMuonAndAdam:
     @staticmethod
     @torch.compile(dynamic=False, fullgraph=True)
     def _adam_update_step(p_slice, g_slice, exp_avg, exp_avg_sq, beta1, beta2, eps, step_size_t, eff_wd_t):
-        """Compiled Adam update step."""
-        exp_avg.mul_(beta1).add_(g_slice, alpha=1 - beta1)
-        exp_avg_sq.mul_(beta2).addcmul_(g_slice, g_slice, value=1 - beta2)
-        update = exp_avg.div(exp_avg_sq.sqrt().add_(eps)).mul_(step_size_t)
+        """Compiled Adam update step. exp_avg / exp_avg_sq stored in bf16 with stochastic rounding
+        (Amazon arXiv:2502.20566, llm.c PR #772): upcast to fp32 for math, then lsb-noise + truncate
+        on writeback to avoid the small-update drift that round-to-nearest bf16 introduces."""
+        exp_avg_f = exp_avg.float().mul_(beta1).add_(g_slice, alpha=1 - beta1)
+        exp_avg_sq_f = exp_avg_sq.float().mul_(beta2).addcmul_(g_slice, g_slice, value=1 - beta2)
+        update = exp_avg_f.div(exp_avg_sq_f.sqrt().add_(eps)).mul_(step_size_t)
         # Cautious weight decay
         mask = (update * p_slice) > 0
         update.addcmul_(p_slice, mask, value=eff_wd_t)
         p_slice.add_(other=update, alpha=-1.0)
+        # Stochastic-round write-back: flip 16 low mantissa bits with uniform noise, then truncate.
+        mask_32 = torch.full_like(exp_avg_f, -65536, dtype=torch.int32)
+        noise1 = torch.randint(0, 1 << 16, exp_avg_f.shape, dtype=torch.int32, device=exp_avg_f.device)
+        noise2 = torch.randint(0, 1 << 16, exp_avg_sq_f.shape, dtype=torch.int32, device=exp_avg_sq_f.device)
+        exp_avg.copy_(((exp_avg_f.view(torch.int32) + noise1) & mask_32).view(torch.float32).bfloat16())
+        exp_avg_sq.copy_(((exp_avg_sq_f.view(torch.int32) + noise2) & mask_32).view(torch.float32).bfloat16())
 
     # -----------------------------------
     # NorMuon update
