@@ -42,6 +42,9 @@ ReLUSqrdMLP = FusedLinearReLUSquareFunction.apply
 
 dynamo.config.recompile_limit = 64
 
+# AdaMuon (arXiv:2507.11005) element-wise second-moment decay applied on top of NorMuon
+ADAMUON_BETA2 = 0.98
+
 # -----------------------------------------------------------------------------
 # Distributed training setup
 rank = int(os.environ["RANK"])
@@ -569,10 +572,16 @@ class NorMuonAndAdam:
                     chunk_shape, dtype=torch.uint16, device=param.device
                 )
 
+                # AdaMuon element-wise variance buffer (arXiv:2507.11005), bf16 for memory
+                adamuon_variance = torch.zeros(
+                    chunk_shape, dtype=torch.bfloat16, device=param.device
+                )
+
                 self.param_states[param] = dict(
                     momentum_buffer=momentum_buffer,
                     second_momentum_buffer=second_momentum_buffer,
                     mantissa=mantissa,
+                    adamuon_variance=adamuon_variance,
                 )
 
     # -----------------------------------
@@ -883,6 +892,11 @@ class NorMuonAndAdam:
             v_chunk, p_state["second_momentum_buffer"], p_cfg.beta2, red_dim
         )
 
+        # AdaMuon element-wise variance overlay (arXiv:2507.11005)
+        v_chunk = NorMuonAndAdam._apply_adamuon_variance(
+            v_chunk, p_state["adamuon_variance"], ADAMUON_BETA2
+        )
+
         # Update parameter, in place, with cautious weight decay
         param_view = param.data.view(p_cfg.reshape)
         p_slice = param_view[rank * p_cfg.chunk_size:(rank + 1) * p_cfg.chunk_size]
@@ -923,6 +937,23 @@ class NorMuonAndAdam:
         p_precise.copy_(p_precise - (p_precise * mask * wd_factor * lr_factor) - (grad * lr_factor))
         p.copy_((p_precise_raw >> 16).to(torch.uint16))
         mantissa.copy_(p_precise_raw.to(torch.uint16))
+
+    @staticmethod
+    @torch.compile(dynamic=False, fullgraph=True)
+    def _apply_adamuon_variance(v_chunk, adamuon_variance, beta2):
+        """AdaMuon element-wise variance adaptation (arXiv:2507.11005).
+        Rescales orthogonalized update by 1/√V_t with V_t = β₂·V_{t-1} + (1-β₂)·v²."""
+        adamuon_variance.mul_(beta2).addcmul_(
+            v_chunk.to(adamuon_variance.dtype), v_chunk.to(adamuon_variance.dtype),
+            value=1.0 - beta2
+        )
+        # variance is bf16; promote for sqrt and divide
+        denom = adamuon_variance.float().sqrt_().add_(1e-8)
+        # preserve global scale of v_chunk so NorMuon's RMS normalization stays meaningful
+        scale = v_chunk.float().square().mean().sqrt_().clamp_min_(1e-10)
+        v_chunk = v_chunk / denom
+        v_chunk = v_chunk * (scale / v_chunk.float().square().mean().sqrt_().clamp_min_(1e-10))
+        return v_chunk
 
     @staticmethod
     @torch.compile(dynamic=False, fullgraph=True)
