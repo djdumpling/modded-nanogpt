@@ -1058,7 +1058,7 @@ class AttnArgs:
     attn_gate_w: torch.Tensor
     ve_gate_w: torch.Tensor
     train_max_seq_len: torch.Tensor
-    qk_gain: torch.Tensor  # (num_heads,) per-head learnable Q gain applied post QK-norm
+    qk_gain: torch.Tensor  # scalar per-layer learnable Q gain applied post QK-norm
 
 flash_attn_interface = get_kernel('varunneal/flash-attention-3').flash_attn_interface
 
@@ -1090,9 +1090,9 @@ class CausalSelfAttention(nn.Module):
         max_len = train_max_seq_len if self.training else (args.val_batch_size // (grad_accum_steps * world_size))
 
         q, k = norm(q), norm(k) # QK norm @Grad62304977
-        # QK-Gain: learnable per-head Q multiplier applied after QK-norm. Strictly generalizes the
-        # current constant softmax_scale by giving the model a per-layer, per-head temperature knob.
-        q = q * attn_args.qk_gain.view(1, 1, self.num_heads, 1).type_as(q)
+        # QK-Gain: learnable per-layer scalar Q multiplier. Equivalent to a learnable softmax_scale
+        # per layer. Scalar multiply fuses into QK-norm's epilogue under torch.compile.
+        q = q * attn_args.qk_gain
 
         if not self.paired:
             q, k = yarn.rotary(q), yarn.rotary(k)
@@ -1239,10 +1239,11 @@ class GPT(nn.Module):
 
         self.post_lambdas = nn.Parameter(torch.ones(num_layers, 2))
 
-        # Per-layer, per-head learnable Q gain applied after QK-norm. Init at 1.0 reproduces the
-        # current baseline (softmax_scale=yarn.attn_scale for every head). The Adam-optimized
-        # gains let the model learn a per-head temperature on top of the scheduled global scale.
-        self.qk_gain = nn.Parameter(torch.ones(num_attn_layers, num_heads))
+        # Per-layer learnable scalar Q gain applied after QK-norm. Equivalent to a per-layer
+        # learnable multiplier on softmax_scale. Init at 1.0 reproduces the baseline. Scalar
+        # form lets torch.compile fuse the multiply as an epilogue of QK-norm, making it nearly
+        # free vs. the per-head form which forced a separate elementwise pass on Q.
+        self.qk_gain = nn.Parameter(torch.ones(num_attn_layers))
 
         # Per-layer injection coefficients for x0 and bigram
         self.x0_lambdas = nn.Parameter(torch.zeros(num_layers))
@@ -1577,7 +1578,7 @@ class Hyperparameters:
     val_batch_size: int = 4 * 64 * 1024 * 8
     # schedule
     num_scheduled_iterations: int = 1440  # number of steps to complete lr and ws schedule
-    num_extension_iterations: int = 18  # number of steps to continue training at final lr and ws
+    num_extension_iterations: int = 40  # number of steps to continue training at final lr and ws
     # evaluation and logging
     run_id: str = f"{uuid.uuid4()}"
     val_loss_every: int = 250  # every how many steps to evaluate val loss? 0 for only at the end
