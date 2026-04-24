@@ -1129,24 +1129,33 @@ class CausalSelfAttention(nn.Module):
             # Forgetting Transformer (arXiv:2503.02130): data-dependent per-head gate g_{i,h},
             # cumulative log-gate bias log(g_{j+1,h}) + ... + log(g_{i,h}) added to logits[i,j,h].
             # Reference path — materializes (T,T) attention; use only on a small subset of layers.
-            # gate_logit_{i,h} = linear(x_i[:12], fox_gate_w_h) + fox_gate_b_h
+            # Enforces the same doc mask and sliding-window as flash_attn_varlen.
             gate_logits = F.linear(x[..., :12], attn_args.fox_gate_w) + attn_args.fox_gate_b  # (B, T, H)
-            log_gates = F.logsigmoid(gate_logits)  # (B, T, H), ≤ 0
-            log_cumsum = log_gates.cumsum(dim=1)   # running sum along query axis
-            # bias[i, j] = log_cumsum[i] - log_cumsum[j]  (zero along diagonal; negative for i>j)
+            log_gates = F.logsigmoid(gate_logits.float())  # (B, T, H) fp32, ≤ 0
+            log_cumsum = log_gates.cumsum(dim=1)
+            # bias[i, j] = log_cumsum[i] - log_cumsum[j]; cross-doc pairs are masked below so the
+            # spurious cross-doc cumsum contribution is harmless.
             bias = log_cumsum[:, :, None, :] - log_cumsum[:, None, :, :]  # (B, T_q, T_k, H)
             bias = bias.permute(0, 3, 1, 2)  # (B, H, T_q, T_k)
 
-            q0 = q[0].transpose(0, 1)  # (H, T, D)
-            k0 = k[0].transpose(0, 1)
+            q0 = q[0].transpose(0, 1).float()  # (H, T, D) fp32 for softmax stability
+            k0 = k[0].transpose(0, 1).float()
             v0 = v[0].transpose(0, 1)
-            S = (q0 @ k0.transpose(-1, -2)) * yarn.attn_scale  # (H, T, T)
+            S = (q0 @ k0.transpose(-1, -2)) * yarn.attn_scale  # (H, T, T) fp32
             S = S + bias[0]
             T_len = S.size(-1)
-            causal_mask = torch.ones(T_len, T_len, device=S.device, dtype=torch.bool).tril()
-            S = S.masked_fill(~causal_mask, float("-inf"))
+            qpos = torch.arange(T_len, device=S.device)
+            causal = qpos[:, None] >= qpos[None, :]
+            window = causal & (qpos[:, None] - qpos[None, :] <= bm_size)
+            # Doc mask from cu_seqlens: positions only attend within their own document.
+            doc_starts = torch.zeros(T_len, dtype=torch.int32, device=S.device)
+            doc_starts[seqlens[1:-1].long()] = 1
+            doc_id = doc_starts.cumsum(0)
+            doc = doc_id[:, None] == doc_id[None, :]
+            mask = window & doc
+            S = S.masked_fill(~mask, float("-inf"))
             A = torch.softmax(S, dim=-1)
-            y = (A @ v0).transpose(0, 1)  # (T, H, D)
+            y = (A.to(v0.dtype) @ v0).transpose(0, 1)  # (T, H, D)
             y = y.unsqueeze(0)  # (B=1, T, H, D)
         else:
             # use flash_attn over flex_attn @varunneal. flash_attn_varlen suggested by @YouJiacheng
@@ -1943,6 +1952,8 @@ for m in model.modules():
         m.weight.data = m.weight.data.bfloat16()
 model.attn_gate_bank.data = model.attn_gate_bank.data.bfloat16()
 model.ve_gate_bank.data = model.ve_gate_bank.data.bfloat16()
+model.fox_gate_bank.data = model.fox_gate_bank.data.bfloat16()
+model.fox_gate_bank_bias.data = model.fox_gate_bank_bias.data.bfloat16()
 model.qk_bank.data = model.qk_bank.data.bfloat16()
 model.vo_bank.data = model.vo_bank.data.bfloat16()
 model.mlp_bank.data = model.mlp_bank.data.bfloat16()
