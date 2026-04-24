@@ -32,6 +32,13 @@ import torch.distributed as dist
 import torch.nn.functional as F
 
 # torch._inductor.config.coordinate_descent_tuning = True # we have banned this flag for new records because it causes compilation to take 30min
+# CUDA Graph capture for compiled regions (ideation.md §12). Requires static shapes — the
+# existing dynamic=False, fullgraph=True compile mode already targets this. Replaying the
+# captured graph eliminates ~4-5 ms of Python / launch overhead per step.
+# NOTE: may interact poorly with NorMuonAndAdam's two-tier scatter_order / data-dependent scalar
+# smoothing; verify no data-dep control flow forces re-capture on every step.
+import torch._inductor.config as _indcfg
+_indcfg.triton.cudagraphs = True
 from kernels import get_kernel
 from torch import Tensor, nn
 
@@ -1904,7 +1911,7 @@ model.mlp_bank.data = model.mlp_bank.data.bfloat16()
 for param in model.parameters():
     dist.broadcast(param.detach(), 0)
 
-model: nn.Module = torch.compile(model, dynamic=False, fullgraph=True)
+model: nn.Module = torch.compile(model, dynamic=False, fullgraph=True, mode="reduce-overhead")
 training_manager = TrainingManager(model)
 
 
