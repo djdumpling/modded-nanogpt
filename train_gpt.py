@@ -42,6 +42,12 @@ ReLUSqrdMLP = FusedLinearReLUSquareFunction.apply
 
 dynamo.config.recompile_limit = 64
 
+# AdEMAMix (arXiv:2409.03137) two-EMA Adam: slow β₃ accumulates long-horizon gradient
+# structure, mixed in with weight α. Paper recommends α≈8 and β₃≈0.9999; for the
+# ~1750-step speedrun we lower α so the slow EMA doesn't overwhelm during warmup.
+ADEMAMIX_BETA3 = 0.9999
+ADEMAMIX_ALPHA = 3.0
+
 # -----------------------------------------------------------------------------
 # Distributed training setup
 rank = int(os.environ["RANK"])
@@ -545,7 +551,12 @@ class NorMuonAndAdam:
                 else:
                     chunk = param
                 exp_avg = torch.zeros_like(chunk, dtype=torch.float32, device=param.device)
-                self.param_states[param] = dict(step=0, exp_avg=exp_avg, exp_avg_sq=torch.zeros_like(exp_avg))
+                # AdEMAMix slow first-moment EMA (arXiv:2409.03137) stored per Adam param
+                exp_avg_slow = torch.zeros_like(exp_avg)
+                self.param_states[param] = dict(
+                    step=0, exp_avg=exp_avg, exp_avg_sq=torch.zeros_like(exp_avg),
+                    exp_avg_slow=exp_avg_slow
+                )
 
             elif p_cfg.optim == "normuon":
                 chunk_shape = (p_cfg.chunk_size, *p_cfg.reshape[1:])
@@ -673,14 +684,14 @@ class NorMuonAndAdam:
             embed_chunk_size = embed_cfg.chunk_size  # 6288
 
             # All-gather lm_head momentum to get full (768, 50304) tensor
-            for key in ["exp_avg", "exp_avg_sq"]:
+            for key in ["exp_avg", "exp_avg_sq", "exp_avg_slow"]:
                 lm_chunk = lm_state[key]  # (96, 50304)
                 full_lm = torch.empty(lm_head.shape[0], lm_head.shape[1], dtype=lm_chunk.dtype, device=lm_chunk.device)
                 dist.all_gather_into_tensor(full_lm, lm_chunk.contiguous())
                 embed_state[key].copy_(full_lm.T[rank * embed_chunk_size:(rank + 1) * embed_chunk_size])
         else:
             # Single GPU: simple transpose
-            for key in ["exp_avg", "exp_avg_sq"]:
+            for key in ["exp_avg", "exp_avg_sq", "exp_avg_slow"]:
                 embed_state[key].copy_(lm_state[key].T)
 
         # Mark as split
@@ -839,18 +850,24 @@ class NorMuonAndAdam:
 
         NorMuonAndAdam._adam_update_step(
             p_slice, grad_chunk, p_state["exp_avg"], p_state["exp_avg_sq"],
-            beta1, beta2, p_cfg.eps, self._step_size_t, self._eff_wd_t
+            p_state["exp_avg_slow"],
+            beta1, beta2, ADEMAMIX_BETA3, ADEMAMIX_ALPHA,
+            p_cfg.eps, self._step_size_t, self._eff_wd_t
         )
 
         return p_slice
 
     @staticmethod
     @torch.compile(dynamic=False, fullgraph=True)
-    def _adam_update_step(p_slice, g_slice, exp_avg, exp_avg_sq, beta1, beta2, eps, step_size_t, eff_wd_t):
-        """Compiled Adam update step."""
+    def _adam_update_step(p_slice, g_slice, exp_avg, exp_avg_sq, exp_avg_slow,
+                          beta1, beta2, beta3, alpha, eps, step_size_t, eff_wd_t):
+        """Compiled AdEMAMix update step (arXiv:2409.03137).
+        Direction: (m_fast + α·m_slow) / (√v + ε) with m_slow EMA β₃ ≈ 0.9999."""
         exp_avg.mul_(beta1).add_(g_slice, alpha=1 - beta1)
+        exp_avg_slow.mul_(beta3).add_(g_slice, alpha=1 - beta3)
         exp_avg_sq.mul_(beta2).addcmul_(g_slice, g_slice, value=1 - beta2)
-        update = exp_avg.div(exp_avg_sq.sqrt().add_(eps)).mul_(step_size_t)
+        direction = exp_avg.add(exp_avg_slow, alpha=alpha)
+        update = direction.div(exp_avg_sq.sqrt().add_(eps)).mul_(step_size_t)
         # Cautious weight decay
         mask = (update * p_slice) > 0
         update.addcmul_(p_slice, mask, value=eff_wd_t)
