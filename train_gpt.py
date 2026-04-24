@@ -1233,6 +1233,14 @@ class GPT(nn.Module):
         self.bigram_embed = nn.Embedding(args.bigram_vocab_size, model_dim)
         nn.init.zeros_(self.bigram_embed.weight)
 
+        # Register tokens (arXiv:2309.16588): learnable per-doc offset added to BOS embeddings
+        # so BOS positions get a dedicated attention-sink channel. 4 register "flavors" rotated
+        # across consecutive BOS positions give the model several sink patterns. Init zeros.
+        self.num_register_tokens = 4
+        self.register_tokens = nn.Parameter(
+            torch.zeros(self.num_register_tokens, model_dim, dtype=torch.bfloat16)
+        )
+
         self.post_lambdas = nn.Parameter(torch.ones(num_layers, 2))
 
         # Per-layer injection coefficients for x0 and bigram
@@ -1296,6 +1304,15 @@ class GPT(nn.Module):
 
         # ---- Embeddings and input preparation ----
         x = self.embed(input_seq) # embed is synced from lm_head during tied phase by optimizer
+
+        # Register token offsets added at BOS positions (arXiv:2309.16588). We rotate across
+        # num_register_tokens learnable vectors using (cumulative BOS index % num_registers).
+        is_bos = (input_seq == BOS_ID)
+        if self.num_register_tokens > 0:
+            bos_counter = is_bos.cumsum(0) - 1  # -1 for positions before the first BOS
+            reg_idx = (bos_counter.clamp_min(0) % self.num_register_tokens)
+            reg_offsets = self.register_tokens[reg_idx]  # (T, dim)
+            x = x + reg_offsets * is_bos.to(x.dtype).unsqueeze(-1)
         
         x0_bigram = self.bigram_embed(bigram_input_seq)[None]
 
@@ -1705,6 +1722,7 @@ class TrainingManager():
             "x0_lambdas":     {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "bigram_lambdas": {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "resid_lambdas":  {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 5.0,  "wd_mul": 0.0},
+            "register_tokens":{"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "value_embeds":   {"optim": "adam",    "comms": "sharded",    "adam_betas": [0.75, 0.95], "lr_mul": 75.,  "wd_mul": 5.0},
             "embed":          {"optim": "adam",    "comms": "sharded",    "adam_betas": [0.5,  0.95], "wd_mul": 150.},
         }
@@ -1712,7 +1730,7 @@ class TrainingManager():
         # - Process smaller/faster params first while large reduces complete
         # - lm_head must complete before embed sync (when tied)
         self.work_order = [
-            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas",  # Small, fast
+            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas", "register_tokens",  # Small, fast
             "value_embeds", "bigram_embed",  # Medium
             "lm_head", "embed",   # lm_head must complete before embed sync (when tied)
             "qk_bank", "vo_bank", "mlp_bank",  # Large, polar express - process last to maximize overlap
