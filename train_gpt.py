@@ -655,6 +655,7 @@ class NorMuonAndAdam:
                 p_state["momentum_buffer"].zero_()
                 p_state["mantissa"].zero_()
                 p_state["second_momentum_buffer"].zero_()
+                p_state["adamuon_variance"].zero_()
 
     def copy_lm_state_to_embed(self):
         """
