@@ -42,6 +42,10 @@ ReLUSqrdMLP = FusedLinearReLUSquareFunction.apply
 
 dynamo.config.recompile_limit = 64
 
+# Power-law cooldown exponent (arXiv:2408.13359). p=1.0 recovers the baseline linear decay;
+# p>1.0 holds LR near peak for longer, which the paper argues is batch/token-invariant.
+POWER_SCHEDULER_EXP = 2.0
+
 # -----------------------------------------------------------------------------
 # Distributed training setup
 rank = int(os.environ["RANK"])
@@ -1638,8 +1642,11 @@ class TrainingSchedule:
         lr = stage.lr_mul
         cd_start = int(self.scheduled_iterations * (1 - self.cooldown_frac))
         if step >= cd_start:
+            # Power-scheduler decay (arXiv:2408.13359): (1-t)^p instead of linear.
+            # p>1 keeps LR near peak for longer, approximating the paper's batch/token-invariant shape.
             t = min(1.0, (step - cd_start) / (self.scheduled_iterations - cd_start))
-            lr = lr * (1 - t) + 0.15 * t
+            floor_lr = 0.15
+            lr = floor_lr + (lr - floor_lr) * (1 - t) ** POWER_SCHEDULER_EXP
         return lr
 
 # window_sizes are in units of `block_size` tokens (defined in TrainingManager)
