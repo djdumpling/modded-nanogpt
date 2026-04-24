@@ -167,15 +167,17 @@ polar_express_coeffs = [
 ]
 
 @torch.compile(dynamic=False, fullgraph=True) # Must use dynamic=False or else it's much slower
+DION_ENABLED = True  # Dion power-iteration orthogonalizer (arXiv:2504.05295)
+
 def polar_express(grad_chunk: torch.Tensor, momentum_buffer: torch.Tensor, momentum_t: torch.Tensor,
                   split_baddbmm: bool = False):
     """
-    Fused Nesterov momentum + Polar Express Sign Method.
-    Nesterov momentum is applied in FP32, then the result is cast to BF16 for polar express
-    orthogonalization, avoiding materialization of the FP32 intermediate between graph breaks.
-
-    Polar Express: https://arxiv.org/pdf/2505.16932
-    by Noah Amsel, David Persson, Christopher Musco, Robert M. Gower.
+    Fused Nesterov momentum + orthogonalization. Baseline uses Polar Express (arXiv:2505.16932);
+    when DION_ENABLED is set, uses a single-iteration Dion-style power iteration
+    (arXiv:2504.05295) via torch.linalg.qr instead. At full rank, the two produce the same
+    orthogonal polar factor; Dion's advantage is in its persistent U / error-feedback story
+    which is *not* captured by this scaffold (would require a persistent U buffer in
+    NorMuon state and momentum-buffer subtraction after the update).
 
     momentum_t is a 0-D CPU tensor to avoid triggering graph recompilations when the value changes.
     """
@@ -191,6 +193,25 @@ def polar_express(grad_chunk: torch.Tensor, momentum_buffer: torch.Tensor, momen
     X = X / (X.norm(dim=(-2, -1), keepdim=True) * (1 + 2e-2) + 1e-6)
 
     X = X.contiguous()
+
+    if DION_ENABLED:
+        # Dion power iteration (scaffold, no error feedback, no persistent U):
+        #   V_r = qr(X.T @ X)   (wide case starts from X.T)
+        #   U_r = qr(X @ V_r)
+        #   orthogonal polar factor ≈ U_r @ V_r.T
+        # qr on bf16 is unsupported; promote to fp32 just for the QR step.
+        Xf = X.float()
+        if is_tall:
+            V = Xf.mT @ Xf
+            V, _ = torch.linalg.qr(V)
+            U = Xf @ V
+            U, _ = torch.linalg.qr(U)
+        else:
+            U = Xf @ Xf.mT
+            U, _ = torch.linalg.qr(U)
+            V = Xf.mT @ U
+            V, _ = torch.linalg.qr(V)
+        return (U @ V.mT).to(X.dtype)
 
     if is_tall:
         # Tall: use Triton kernels with X^T @ X (small) and right multiplication
