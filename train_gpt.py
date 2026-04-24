@@ -1235,6 +1235,12 @@ class GPT(nn.Module):
 
         self.post_lambdas = nn.Parameter(torch.ones(num_layers, 2))
 
+        # Dynamic Tanh (arXiv:2503.10622) replacing pre-attn / pre-MLP RMSNorm positions.
+        # α: per-layer×slot scalar (sharpness, init 0.8). γ: per-layer×slot×channel gain (init 1.0).
+        # β omitted per paper's LLaMA recipe. QK-norm (inside attention) stays as RMSNorm.
+        self.dyt_alpha = nn.Parameter(torch.full((num_layers, 2), 0.8))
+        self.dyt_gamma = nn.Parameter(torch.ones(num_layers, 2, model_dim))
+
         # Per-layer injection coefficients for x0 and bigram
         self.x0_lambdas = nn.Parameter(torch.zeros(num_layers))
         self.bigram_lambdas = nn.Parameter(0.05 * torch.ones(num_layers))
@@ -1281,6 +1287,10 @@ class GPT(nn.Module):
         post_lambdas_mlp  = self.post_lambdas[:, 1].bfloat16().unbind(0)
         x0_lambdas = self.x0_lambdas.bfloat16().unbind(0)
         bigram_lambdas = self.bigram_lambdas.bfloat16().unbind(0)
+        dyt_alpha_attn = self.dyt_alpha[:, 0].bfloat16().unbind(0)
+        dyt_alpha_mlp  = self.dyt_alpha[:, 1].bfloat16().unbind(0)
+        dyt_gamma_attn = self.dyt_gamma[:, 0].bfloat16().unbind(0)
+        dyt_gamma_mlp  = self.dyt_gamma[:, 1].bfloat16().unbind(0)
         ag = self.attn_gate_bank.unbind(0)
         veg = self.ve_gate_bank.unbind(0)
         attn_gates = [*ag[:6], None, *ag[6:]]
@@ -1348,9 +1358,11 @@ class GPT(nn.Module):
                 x = x + skip_gate_out * skip_connection
             else:
                 attn_in = x_backout if x_backout is not None else x
-                attn_out = attn(norm(attn_in), attn_args, qkvo_w)
+                attn_pre = torch.tanh(dyt_alpha_attn[i] * attn_in) * dyt_gamma_attn[i]
+                attn_out = attn(attn_pre, attn_args, qkvo_w)
                 x = resid_lambdas_attn[i] * x + post_lambdas_attn[i] * attn_out + x0_inject[i]
-            x = resid_lambdas_mlp[i] * x + post_lambdas_mlp[i] * ReLUSqrdMLP(norm(x), c_fc, c_proj)
+            mlp_pre = torch.tanh(dyt_alpha_mlp[i] * x) * dyt_gamma_mlp[i]
+            x = resid_lambdas_mlp[i] * x + post_lambdas_mlp[i] * ReLUSqrdMLP(mlp_pre, c_fc, c_proj)
             if i == 3:
                 skip_connection = x
             if i == 7:
@@ -1705,6 +1717,8 @@ class TrainingManager():
             "x0_lambdas":     {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "bigram_lambdas": {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "resid_lambdas":  {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 5.0,  "wd_mul": 0.0},
+            "dyt_alpha":      {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 5.0,  "wd_mul": 0.0},
+            "dyt_gamma":      {"optim": "adam",    "comms": "replicated",     "adam_betas": [0.9,  0.95], "lr_mul": 1.0,  "wd_mul": 0.0},
             "value_embeds":   {"optim": "adam",    "comms": "sharded",    "adam_betas": [0.75, 0.95], "lr_mul": 75.,  "wd_mul": 5.0},
             "embed":          {"optim": "adam",    "comms": "sharded",    "adam_betas": [0.5,  0.95], "wd_mul": 150.},
         }
@@ -1712,7 +1726,7 @@ class TrainingManager():
         # - Process smaller/faster params first while large reduces complete
         # - lm_head must complete before embed sync (when tied)
         self.work_order = [
-            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas",  # Small, fast
+            "scalars", "smear_gate", "skip_gate", "attn_gate_bank", "ve_gate_bank", "post_lambdas", "x0_lambdas", "bigram_lambdas", "resid_lambdas", "dyt_alpha", "dyt_gamma",  # Small, fast
             "value_embeds", "bigram_embed",  # Medium
             "lm_head", "embed",   # lm_head must complete before embed sync (when tied)
             "qk_bank", "vo_bank", "mlp_bank",  # Large, polar express - process last to maximize overlap
