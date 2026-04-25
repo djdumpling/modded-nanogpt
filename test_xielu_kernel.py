@@ -20,14 +20,21 @@ from triton_kernels import FusedLinearReLUSquareFunction, FusedLinearXIELUFuncti
 
 
 def xielu_ref(x, W1, W2, alpha_p_raw, alpha_n_raw):
-    """Unfused reference (the original path on exp/xielu before the kernel landed)."""
-    h = x @ W1.type_as(x).T
-    ap = F.softplus(alpha_p_raw.float()).type_as(h)
-    an = F.softplus(alpha_n_raw.float()).type_as(h)
+    """fp32 reference. Casts inputs to fp32 internally so the chain rule is computed
+    without bf16 op-by-op noise; output is cast back to bf16 to match fused dtype.
+    This is a stricter ground truth than the original bf16 unfused path — comparing
+    fused against a bf16 reference would only verify "two noisy paths agree", which
+    masks whether either is correct."""
+    x_f = x.float()
+    W1_f = W1.float()
+    W2_f = W2.float()
+    h = x_f @ W1_f.T
+    ap = F.softplus(alpha_p_raw.float())
+    an = F.softplus(alpha_n_raw.float())
     pos = ap * h * h
     neg = an * torch.expm1(h.clamp(max=0.0))
     h_act = torch.where(h > 0, pos, neg)
-    return h_act @ W2.type_as(x)
+    return (h_act @ W2_f).bfloat16()
 
 
 def make_inputs(M, K, N, device, seed=0):
@@ -66,32 +73,46 @@ def correctness(M, K, N, device):
     )
     assert torch.equal(g_ref, g_fus), "upstream grads diverged — seeding bug"
 
-    def cmp(name, a, b, atol, rtol):
+    def cmp(name, a, b, max_rel):
+        # Use scale-normalized error: |Δ|_max / |b|_max. Absolute thresholds are
+        # misleading here because dW1/dW2 magnitudes scale with M and grad scale.
         a_f = a.float()
         b_f = b.float()
         max_abs = (a_f - b_f).abs().max().item()
-        rel = (a_f - b_f).abs().max().item() / (b_f.abs().max().item() + 1e-9)
-        ok = torch.allclose(a_f, b_f, atol=atol, rtol=rtol)
+        scale = b_f.abs().max().item() + 1e-9
+        rel = max_abs / scale
+        ok = rel <= max_rel
         flag = "OK " if ok else "FAIL"
-        print(f"  [{flag}] {name:>10}  max|Δ|={max_abs:.3e}  max_rel={rel:.3e}")
+        print(f"  [{flag}] {name:>10}  max|Δ|={max_abs:.3e}  max_rel={rel:.3e}  (≤ {max_rel:.0e})")
         return ok
 
-    # bf16 matmul tolerances are loose; tighten if you want to chase precision.
+    # bf16-precision floor on chained matmul outputs is ~1e-2 relative.
+    # Atomic-add reductions for dap/dan have order-of-summation noise; allow looser.
     all_ok = True
-    all_ok &= cmp("out",    out_fus, out_ref, atol=1e-2, rtol=1e-2)
-    all_ok &= cmp("dx",     dx_fus,  dx_ref,  atol=1e-2, rtol=1e-2)
-    all_ok &= cmp("dW1",    dW1_fus, dW1_ref, atol=2e-2, rtol=2e-2)
-    all_ok &= cmp("dW2",    dW2_fus, dW2_ref, atol=2e-2, rtol=2e-2)
-    # α gradients are scalar reductions over (M, N); compare with looser rtol.
-    all_ok &= cmp("dap",    dap_fus, dap_ref, atol=5e-2, rtol=5e-2)
-    all_ok &= cmp("dan",    dan_fus, dan_ref, atol=5e-2, rtol=5e-2)
+    all_ok &= cmp("out", out_fus, out_ref, max_rel=1e-2)
+    all_ok &= cmp("dx",  dx_fus,  dx_ref,  max_rel=1e-2)
+    all_ok &= cmp("dW1", dW1_fus, dW1_ref, max_rel=1e-2)
+    all_ok &= cmp("dW2", dW2_fus, dW2_ref, max_rel=1e-2)
+    all_ok &= cmp("dap", dap_fus, dap_ref, max_rel=5e-2)
+    all_ok &= cmp("dan", dan_fus, dan_ref, max_rel=5e-2)
     return all_ok
 
 
 def bench_one(fn, args, n_warmup=10, n_iter=50):
+    # Pre-allocate a real random upstream grad (contiguous, materialized).
+    # `out.sum().backward()` produces a stride-0 broadcast grad which fails the
+    # contiguity assert inside TensorDescriptor.from_tensor in the fused backward.
+    with torch.no_grad():
+        probe = fn(*args)
+        g = torch.randn_like(probe)
+        del probe
+    for a in args:
+        if a.grad is not None:
+            a.grad = None
+
     for _ in range(n_warmup):
         out = fn(*args)
-        out.sum().backward()
+        out.backward(g)
         for a in args:
             if a.grad is not None:
                 a.grad = None
@@ -101,7 +122,7 @@ def bench_one(fn, args, n_warmup=10, n_iter=50):
     start.record()
     for _ in range(n_iter):
         out = fn(*args)
-        out.sum().backward()
+        out.backward(g)
         for a in args:
             if a.grad is not None:
                 a.grad = None
