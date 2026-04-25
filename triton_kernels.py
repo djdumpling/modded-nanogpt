@@ -586,34 +586,40 @@ def linear_xielu_kernel(a_desc, b_desc, c_desc, aux_desc,
 
         if FORWARD:
             # acc{0,1} are fp32 pre-activation halves; compute branch-select activation in fp32.
+            # tl.exp(x)-1 instead of expm1: cancellation error ~1e-7 is 5 ODM below the bf16 input noise.
             mask0 = acc0 > 0
-            post0 = tl.where(mask0, ap * acc0 * acc0, an * tl.math.expm1(acc0))
+            exp0 = tl.exp(acc0)
+            post0 = tl.where(mask0, ap * acc0 * acc0, an * (exp0 - 1.0))
             c_desc.store([offs_am_c, offs_bn_c], acc0.to(dtype))
             aux_desc.store([offs_am_c, offs_bn_c], post0.to(dtype))
 
             mask1 = acc1 > 0
-            post1 = tl.where(mask1, ap * acc1 * acc1, an * tl.math.expm1(acc1))
+            exp1 = tl.exp(acc1)
+            post1 = tl.where(mask1, ap * acc1 * acc1, an * (exp1 - 1.0))
             c_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], acc1.to(dtype))
             aux_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], post1.to(dtype))
         else:
             # acc{0,1} are fp32 grad_post = (grad_output @ W2) halves; aux holds saved pre.
+            # Reuse a single tl.exp per element for both the chain-rule mul and the dα_n contribution.
             pre0 = aux_desc.load([offs_am_c, offs_bn_c]).to(tl.float32)
             mask0 = pre0 > 0
-            fprime0 = tl.where(mask0, 2.0 * ap * pre0, an * tl.math.exp(pre0))
+            exp0 = tl.exp(pre0)
+            fprime0 = tl.where(mask0, 2.0 * ap * pre0, an * exp0)
             dpre0 = acc0 * fprime0
             c_desc.store([offs_am_c, offs_bn_c], dpre0.to(dtype))
             contrib_p0 = tl.sum(tl.where(mask0, pre0 * pre0 * acc0, 0.0))
-            contrib_n0 = tl.sum(tl.where(mask0, 0.0, tl.math.expm1(pre0) * acc0))
+            contrib_n0 = tl.sum(tl.where(mask0, 0.0, (exp0 - 1.0) * acc0))
             tl.atomic_add(dap_ptr, contrib_p0)
             tl.atomic_add(dan_ptr, contrib_n0)
 
             pre1 = aux_desc.load([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2]).to(tl.float32)
             mask1 = pre1 > 0
-            fprime1 = tl.where(mask1, 2.0 * ap * pre1, an * tl.math.exp(pre1))
+            exp1 = tl.exp(pre1)
+            fprime1 = tl.where(mask1, 2.0 * ap * pre1, an * exp1)
             dpre1 = acc1 * fprime1
             c_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], dpre1.to(dtype))
             contrib_p1 = tl.sum(tl.where(mask1, pre1 * pre1 * acc1, 0.0))
-            contrib_n1 = tl.sum(tl.where(mask1, 0.0, tl.math.expm1(pre1) * acc1))
+            contrib_n1 = tl.sum(tl.where(mask1, 0.0, (exp1 - 1.0) * acc1))
             tl.atomic_add(dap_ptr, contrib_p1)
             tl.atomic_add(dan_ptr, contrib_n1)
 
