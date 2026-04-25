@@ -35,27 +35,12 @@ import torch.nn.functional as F
 from kernels import get_kernel
 from torch import Tensor, nn
 
-from triton_kernels import XXT, XTX, ba_plus_cAA, FusedLinearReLUSquareFunction, FusedSoftcappedCrossEntropy, transpose_add, transpose_copy
+from triton_kernels import XXT, XTX, ba_plus_cAA, FusedLinearReLUSquareFunction, FusedLinearXIELUFunction, FusedSoftcappedCrossEntropy, transpose_add, transpose_copy
 # Fused triton kernel: relu(x @ W1.T)^2 @ W2.T
 # https://arxiv.org/abs/2109.08668v2; ~1-2% better than GELU; suggested by @SKYLINEZ007 and @Grad62304977
 ReLUSqrdMLP = FusedLinearReLUSquareFunction.apply
-
-def xielu_mlp(x, c_fc, c_proj, alpha_p, alpha_n):
-    """xIELU activation MLP (NVIDIA arXiv:2411.13010).
-    For h = x @ c_fc.T : αp · h²         if h > 0
-                         αn · (exp(h)−1) otherwise
-    αp, αn are per-layer learnable scalars, softplus-constrained for positivity.
-    Unfused reference path; a fused variant would mirror linear_relu_square_kernel
-    with a branch-select epilogue on the activation sign."""
-    # Layout matches FusedLinearReLUSquareFunction: c_fc and c_proj are both (mlp_hdim, dim)
-    # with c_fc used as x @ c_fc.T and c_proj used directly as h_act @ c_proj.
-    h = x @ c_fc.type_as(x).T
-    ap = torch.nn.functional.softplus(alpha_p).type_as(h)
-    an = torch.nn.functional.softplus(alpha_n).type_as(h)
-    pos = ap * h * h
-    neg = an * torch.expm1(h.clamp(max=0.0))
-    h_act = torch.where(h > 0, pos, neg)
-    return h_act @ c_proj.type_as(x)
+# Fused triton kernel: xielu(x @ W1.T) @ W2 with per-layer αp, αn (NVIDIA arXiv:2411.13010).
+xIELUMLP = FusedLinearXIELUFunction.apply
 
 dynamo.config.recompile_limit = 64
 
@@ -1374,7 +1359,7 @@ class GPT(nn.Module):
                 attn_in = x_backout if x_backout is not None else x
                 attn_out = attn(norm(attn_in), attn_args, qkvo_w)
                 x = resid_lambdas_attn[i] * x + post_lambdas_attn[i] * attn_out + x0_inject[i]
-            x = resid_lambdas_mlp[i] * x + post_lambdas_mlp[i] * xielu_mlp(norm(x), c_fc, c_proj, xielu_ap[i], xielu_an[i])
+            x = resid_lambdas_mlp[i] * x + post_lambdas_mlp[i] * xIELUMLP(norm(x), c_fc, c_proj, xielu_ap[i], xielu_an[i])
             if i == 3:
                 skip_connection = x
             if i == 7:

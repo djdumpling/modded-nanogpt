@@ -535,6 +535,182 @@ class FusedLinearReLUSquareFunction(torch.autograd.Function):
 
 
 # -----------------------------------------------------------------------------
+# Fused xIELU MLP kernel (NVIDIA arXiv:2411.13010): activation is
+#   f(h) = αp · h²            if h > 0
+#          αn · (exp(h) − 1)  otherwise
+# αp, αn are per-layer scalars (softplus-applied on the host, passed as fp32).
+# Same matmul + epilogue layout as linear_relu_square_kernel; backward also
+# accumulates dαp, dαn via per-tile atomic adds.
+
+@triton.jit
+def linear_xielu_kernel(a_desc, b_desc, c_desc, aux_desc,
+                        M, N, K,
+                        ap_ptr, an_ptr,
+                        dap_ptr, dan_ptr,
+                        BLOCK_SIZE_M: tl.constexpr,
+                        BLOCK_SIZE_N: tl.constexpr,
+                        BLOCK_SIZE_K: tl.constexpr,
+                        GROUP_SIZE_M: tl.constexpr,
+                        NUM_SMS: tl.constexpr,
+                        FORWARD: tl.constexpr,
+                        ):
+    dtype = tl.bfloat16
+    start_pid = tl.program_id(axis=0)
+    num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
+    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
+    k_tiles = tl.cdiv(K, BLOCK_SIZE_K)
+    num_tiles = num_pid_m * num_pid_n
+
+    ap = tl.load(ap_ptr).to(tl.float32)
+    an = tl.load(an_ptr).to(tl.float32)
+
+    for tile_id in tl.range(start_pid, num_tiles, NUM_SMS, flatten=True):
+        pid_m = tile_id // num_pid_n
+        pid_n = tile_id % num_pid_n
+        offs_am = pid_m * BLOCK_SIZE_M
+        offs_bn = pid_n * BLOCK_SIZE_N
+
+        accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+        for ki in range(k_tiles):
+            offs_k = ki * BLOCK_SIZE_K
+            a = a_desc.load([offs_am, offs_k])
+            b = b_desc.load([offs_bn, offs_k])
+            accumulator = tl.dot(a, b.T, accumulator)
+
+        offs_am_c = pid_m * BLOCK_SIZE_M
+        offs_bn_c = pid_n * BLOCK_SIZE_N
+
+        acc = tl.reshape(accumulator, (BLOCK_SIZE_M, 2, BLOCK_SIZE_N // 2))
+        acc = tl.permute(acc, (0, 2, 1))
+        acc0, acc1 = tl.split(acc)
+
+        if FORWARD:
+            # acc{0,1} are fp32 pre-activation halves; compute branch-select activation in fp32.
+            mask0 = acc0 > 0
+            post0 = tl.where(mask0, ap * acc0 * acc0, an * tl.math.expm1(acc0))
+            c_desc.store([offs_am_c, offs_bn_c], acc0.to(dtype))
+            aux_desc.store([offs_am_c, offs_bn_c], post0.to(dtype))
+
+            mask1 = acc1 > 0
+            post1 = tl.where(mask1, ap * acc1 * acc1, an * tl.math.expm1(acc1))
+            c_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], acc1.to(dtype))
+            aux_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], post1.to(dtype))
+        else:
+            # acc{0,1} are fp32 grad_post = (grad_output @ W2) halves; aux holds saved pre.
+            pre0 = aux_desc.load([offs_am_c, offs_bn_c]).to(tl.float32)
+            mask0 = pre0 > 0
+            fprime0 = tl.where(mask0, 2.0 * ap * pre0, an * tl.math.exp(pre0))
+            dpre0 = acc0 * fprime0
+            c_desc.store([offs_am_c, offs_bn_c], dpre0.to(dtype))
+            contrib_p0 = tl.sum(tl.where(mask0, pre0 * pre0 * acc0, 0.0))
+            contrib_n0 = tl.sum(tl.where(mask0, 0.0, tl.math.expm1(pre0) * acc0))
+            tl.atomic_add(dap_ptr, contrib_p0)
+            tl.atomic_add(dan_ptr, contrib_n0)
+
+            pre1 = aux_desc.load([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2]).to(tl.float32)
+            mask1 = pre1 > 0
+            fprime1 = tl.where(mask1, 2.0 * ap * pre1, an * tl.math.exp(pre1))
+            dpre1 = acc1 * fprime1
+            c_desc.store([offs_am_c, offs_bn_c + BLOCK_SIZE_N // 2], dpre1.to(dtype))
+            contrib_p1 = tl.sum(tl.where(mask1, pre1 * pre1 * acc1, 0.0))
+            contrib_n1 = tl.sum(tl.where(mask1, 0.0, tl.math.expm1(pre1) * acc1))
+            tl.atomic_add(dap_ptr, contrib_p1)
+            tl.atomic_add(dan_ptr, contrib_n1)
+
+
+def linear_xielu(a, b, ap, an, aux=None, dap=None, dan=None):
+    """Forward (aux=None): returns (pre, post) where post = xielu(pre) and pre = a @ b.T.
+    Backward (aux=pre): returns dpre = (grad_post @ W2) * f'(pre); dap/dan are zero-init
+    fp32 scalar buffers that the kernel atomically accumulates dα{p,n} into."""
+    M, K = a.shape
+    N, _ = b.shape
+    dtype = a.dtype
+
+    c = torch.empty((M, N), device=a.device, dtype=dtype)
+
+    FORWARD = aux is None
+    if FORWARD:
+        aux = torch.empty((M, N), device=a.device, dtype=dtype)
+
+    NUM_SMS = torch.cuda.get_device_properties("cuda").multi_processor_count
+
+    BLOCK_SIZE_M = 128
+    BLOCK_SIZE_N = 256
+    BLOCK_SIZE_K = 64
+    # xIELU has higher register pressure than ReLU²; drop fwd from 4→3 stages to stay within budget.
+    num_stages = 3
+    num_warps = 8
+
+    a_desc = TensorDescriptor.from_tensor(a, [BLOCK_SIZE_M, BLOCK_SIZE_K])
+    b_desc = TensorDescriptor.from_tensor(b, [BLOCK_SIZE_N, BLOCK_SIZE_K])
+    c_desc = TensorDescriptor.from_tensor(c, [BLOCK_SIZE_M, BLOCK_SIZE_N // 2])
+    aux_desc = TensorDescriptor.from_tensor(aux, [BLOCK_SIZE_M, BLOCK_SIZE_N // 2])
+
+    # Always pass valid scalar buffers (dummies in fwd path are unused inside the kernel).
+    if dap is None:
+        dap = torch.empty(1, device=a.device, dtype=torch.float32)
+    if dan is None:
+        dan = torch.empty(1, device=a.device, dtype=torch.float32)
+
+    def grid(META):
+        return (min(
+            NUM_SMS,
+            triton.cdiv(M, BLOCK_SIZE_M) * triton.cdiv(N, BLOCK_SIZE_N),
+        ), )
+
+    linear_xielu_kernel[grid](
+        a_desc, b_desc, c_desc, aux_desc,
+        M, N, K,
+        ap, an,
+        dap, dan,
+        BLOCK_SIZE_M=BLOCK_SIZE_M,
+        BLOCK_SIZE_N=BLOCK_SIZE_N,
+        BLOCK_SIZE_K=BLOCK_SIZE_K,
+        GROUP_SIZE_M=1,
+        NUM_SMS=NUM_SMS,
+        FORWARD=FORWARD,
+        num_stages=num_stages,
+        num_warps=num_warps
+    )
+
+    if FORWARD:
+        return c, aux
+    else:
+        return c
+
+
+class FusedLinearXIELUFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, W1, W2, alpha_p_raw, alpha_n_raw):
+        # alpha_{p,n}_raw are 0-d tensors (typically bf16, derived from an fp32 nn.Parameter).
+        # Run softplus in fp32 for numerical stability; pass scalars to the kernel as fp32.
+        alpha_p_raw_f = alpha_p_raw.float()
+        alpha_n_raw_f = alpha_n_raw.float()
+        ap = torch.nn.functional.softplus(alpha_p_raw_f)
+        an = torch.nn.functional.softplus(alpha_n_raw_f)
+        pre, post = linear_xielu(x.view((-1, x.shape[-1])), W1, ap, an)
+        x3 = post @ W2
+        ctx.save_for_backward(x, W1, W2, pre, post, alpha_p_raw_f, alpha_n_raw_f, ap, an)
+        ctx.alpha_dtype = alpha_p_raw.dtype
+        return x3.view(x.shape)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x, W1, W2, pre, post, alpha_p_raw_f, alpha_n_raw_f, ap, an = ctx.saved_tensors
+        dW2 = post.T @ grad_output
+        dap = torch.zeros(1, device=x.device, dtype=torch.float32)
+        dan = torch.zeros(1, device=x.device, dtype=torch.float32)
+        dpre = linear_xielu(grad_output.view((-1, grad_output.shape[-1])), W2, ap, an,
+                            aux=pre, dap=dap, dan=dan)
+        dW1 = dpre.T @ x
+        dx = dpre @ W1
+        # Chain through softplus: d/dα_raw softplus(α_raw) = sigmoid(α_raw).
+        dalpha_p_raw = (dap.squeeze() * torch.sigmoid(alpha_p_raw_f)).to(ctx.alpha_dtype)
+        dalpha_n_raw = (dan.squeeze() * torch.sigmoid(alpha_n_raw_f)).to(ctx.alpha_dtype)
+        return dx.view(x.shape), dW1, dW2, dalpha_p_raw, dalpha_n_raw
+
+
+# -----------------------------------------------------------------------------
 # Tiled transpose copy kernel: dst (N, M) = src (M, N).T
 # Uses coalesced reads from src and coalesced writes to dst via tl.trans().
 # Replaces PyTorch's elementwise copy_ which uses a naive 75k-block kernel
