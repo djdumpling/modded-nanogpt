@@ -1,0 +1,228 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global}
+    \entry{jordan_modded_nanogpt}{misc}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=b7cea168d7f8507a65b724c70ec02c69}{%
+           family={Jordan},
+           familyi={J\bibinitperiod},
+           given={Keller},
+           giveni={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{fullhash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{bibnamehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{authorbibnamehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{authornamehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{authorfullhash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{\url{https://github.com/KellerJordan/modded-nanogpt}}
+      \field{title}{Modded-{NanoGPT}: speedrunning {GPT-2}-{(124M)} to 3.28 val loss}
+      \field{year}{2024--2026}
+    \endentry
+    \entry{xsa_zhai}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=ce3efdacef7f3491cce1b6773a97b8bd}{%
+           family={Zhai},
+           familyi={Z\bibinitperiod},
+           given={Yuxin},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \strng{namehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{fullhash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{bibnamehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{authorbibnamehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{authornamehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{authorfullhash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2603.09078}
+      \field{title}{Exclusive Self-Attention: Removing Self-Aligned Components from Attention Outputs}
+      \field{year}{2025}
+    \endentry
+    \entry{muon_jordan}{article}{}
+      \name{author}{1}{}{%
+        {{hash=b7cea168d7f8507a65b724c70ec02c69}{%
+           family={Jordan},
+           familyi={J\bibinitperiod},
+           given={Keller},
+           giveni={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{fullhash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{bibnamehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{authorbibnamehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{authornamehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{authorfullhash}{b7cea168d7f8507a65b724c70ec02c69}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{\url{https://kellerjordan.github.io/posts/muon/}}
+      \field{title}{Muon: An Optimizer for the Hidden Layers of Neural Networks}
+      \field{year}{2024}
+    \endentry
+    \entry{cmuon}{article}{}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2411.16085}
+      \field{title}{Cautious Optimizers: Improving Training with One Line of Code}
+      \field{year}{2024}
+    \endentry
+    \entry{adamuon}{article}{}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2507.11005}
+      \field{title}{Ada{M}uon: Element-wise Variance Adaptation for Spectral Update Optimizers}
+      \field{year}{2025}
+    \endentry
+    \entry{ademamix}{article}{}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labeltitlesource}{title}
+      \field{title}{{AdEMAMix}: Mixing Two {EMA}s of Gradients for Improved Optimization}
+      \field{year}{2024}
+    \endentry
+    \entry{srbf16}{article}{}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2502.20566}
+      \field{title}{Stochastic Rounding for {AdamW} in {bf16}}
+      \field{year}{2025}
+    \endentry
+    \entry{deepseek_v4}{misc}{}
+      \name{author}{1}{}{%
+        {{hash=d597faee5c847cfbb2346d3b8725ba38}{%
+           family={{DeepSeek-AI}},
+           familyi={D\bibinitperiod}}}%
+      }
+      \strng{namehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{fullhash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{bibnamehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{authorbibnamehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{authornamehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{authorfullhash}{d597faee5c847cfbb2346d3b8725ba38}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{DeepSeek-V4} Technical Report}
+      \field{year}{2026}
+    \endentry
+    \entry{power_scheduler}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2408.13359}
+      \field{title}{Power Scheduler: A Batch-Size-Invariant Learning-Rate Scheduler}
+      \field{year}{2024}
+    \endentry
+    \entry{ssmax}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2501.19399}
+      \field{title}{Scalable-Softmax Is Superior for Attention}
+      \field{year}{2025}
+    \endentry
+    \entry{selective_attn}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2410.02703}
+      \field{title}{Selective Attention Improves Transformer}
+      \field{year}{2024}
+    \endentry
+    \entry{registers}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2309.16588}
+      \field{title}{Vision Transformers Need Registers}
+      \field{year}{2023}
+    \endentry
+    \entry{dyt}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2503.10622}
+      \field{title}{Dynamic Tanh: Replacing Layer-Norm with a Cheaper Pre-Activation}
+      \field{year}{2025}
+    \endentry
+    \entry{xielu}{article}{}
+      \name{author}{1}{}{%
+        {{hash=a2fe9051fe051f819bd739ef3e340377}{%
+           family={NVIDIA},
+           familyi={N\bibinitperiod}}}%
+      }
+      \strng{namehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{fullhash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{bibnamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authorbibnamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authornamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authorfullhash}{a2fe9051fe051f819bd739ef3e340377}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2411.13010}
+      \field{title}{{xIELU}: Trainable Piecewise Activation}
+      \field{year}{2024}
+    \endentry
+    \entry{mudd_residual}{article}{}
+      \name{author}{1}{}{%
+        {{hash=0d83438ac71946158c69addb72c3bd0d}{%
+           family={Lin},
+           familyi={L\bibinitperiod},
+           given={et\bibnamedelima al.},
+           giveni={e\bibinitperiod\bibinitdelim a\bibinitperiod}}}%
+      }
+      \strng{namehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{fullhash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{bibnamehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{authorbibnamehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{authornamehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{authorfullhash}{0d83438ac71946158c69addb72c3bd0d}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint}
+      \field{note}{Implementation referenced from \url{https://github.com/Lisennlp/modded-nanogpt} fork.}
+      \field{title}{{MUDD}: Multiway Dynamic Dense Connections for Transformer Residual Streams}
+      \field{year}{2025}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+
