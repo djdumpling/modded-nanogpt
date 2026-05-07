@@ -1,0 +1,17 @@
+[0] Config.pm:307> INFO - This is Biber 2.17
+[0] Config.pm:310> INFO - Logfile is 'report.blg'
+[25] biber:340> INFO - === Thu May  7, 2026, 00:51:45
+[30] Biber.pm:418> INFO - Reading 'report.bcf'
+[54] Biber.pm:972> INFO - Found 27 citekeys in bib section 0
+[59] Biber.pm:4383> INFO - Processing section 0
+[63] Biber.pm:4574> INFO - Looking for bibtex file 'refs.bib' for section 0
+[63] bibtex.pm:1713> INFO - LaTeX decoding ...
+[69] bibtex.pm:1518> INFO - Found BibTeX data source 'refs.bib'
+[117] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[117] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[117] Biber.pm:4203> INFO - Sorting list 'none/global//global/global' of type 'entry' with template 'none' and locale 'en-US'
+[117] Biber.pm:4209> INFO - No sort tailoring available for locale 'en-US'
+[121] bbl.pm:654> INFO - Writing 'report.bbl' with encoding 'UTF-8'
+[125] bbl.pm:757> INFO - Output to report.bbl
+[125] Biber.pm:130> WARN - legacy year field '2024--2026' in entry 'jordan_modded_nanogpt' is not an integer - this will probably not sort properly.
+[125] Biber.pm:132> INFO - WARNINGS: 1

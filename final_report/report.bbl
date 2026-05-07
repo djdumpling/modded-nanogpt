@@ -1,0 +1,582 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global}
+    \entry{jordan_modded_nanogpt}{misc}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=b7cea168d7f8507a65b724c70ec02c69}{%
+           family={Jordan},
+           familyi={J\bibinitperiod},
+           given={Keller},
+           giveni={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{fullhash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{bibnamehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{authorbibnamehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{authornamehash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \strng{authorfullhash}{8d2ca599070f5c5ad50cdea07da792ef}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{\url{https://github.com/KellerJordan/modded-nanogpt}}
+      \field{title}{Modded-{NanoGPT}: speedrunning {GPT-2}-{(124M)} to 3.28 val loss}
+      \field{year}{2024--2026}
+    \endentry
+    \entry{xsa_zhai}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=ce3efdacef7f3491cce1b6773a97b8bd}{%
+           family={Zhai},
+           familyi={Z\bibinitperiod},
+           given={Yuxin},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \strng{namehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{fullhash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{bibnamehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{authorbibnamehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{authornamehash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \strng{authorfullhash}{ba90cc8a4a3bc07549882c5ca785f6b5}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2603.09078}
+      \field{title}{Exclusive Self-Attention: Removing Self-Aligned Components from Attention Outputs}
+      \field{year}{2025}
+    \endentry
+    \entry{muon_jordan}{article}{}
+      \name{author}{1}{}{%
+        {{hash=b7cea168d7f8507a65b724c70ec02c69}{%
+           family={Jordan},
+           familyi={J\bibinitperiod},
+           given={Keller},
+           giveni={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{fullhash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{bibnamehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{authorbibnamehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{authornamehash}{b7cea168d7f8507a65b724c70ec02c69}
+      \strng{authorfullhash}{b7cea168d7f8507a65b724c70ec02c69}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{\url{https://kellerjordan.github.io/posts/muon/}}
+      \field{title}{Muon: An Optimizer for the Hidden Layers of Neural Networks}
+      \field{year}{2024}
+    \endentry
+    \entry{cmuon}{article}{}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2411.16085}
+      \field{title}{Cautious Optimizers: Improving Training with One Line of Code}
+      \field{year}{2024}
+    \endentry
+    \entry{adamuon}{article}{}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2507.11005}
+      \field{title}{Ada{M}uon: Element-wise Variance Adaptation for Spectral Update Optimizers}
+      \field{year}{2025}
+    \endentry
+    \entry{ademamix}{article}{}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labeltitlesource}{title}
+      \field{title}{{AdEMAMix}: Mixing Two {EMA}s of Gradients for Improved Optimization}
+      \field{year}{2024}
+    \endentry
+    \entry{dion}{article}{}
+      \name{author}{1}{}{%
+        {{hash=c3ab3cd17af0c6ba62a4f996e42cb981}{%
+           family={{Microsoft Research}},
+           familyi={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{c3ab3cd17af0c6ba62a4f996e42cb981}
+      \strng{fullhash}{c3ab3cd17af0c6ba62a4f996e42cb981}
+      \strng{bibnamehash}{c3ab3cd17af0c6ba62a4f996e42cb981}
+      \strng{authorbibnamehash}{c3ab3cd17af0c6ba62a4f996e42cb981}
+      \strng{authornamehash}{c3ab3cd17af0c6ba62a4f996e42cb981}
+      \strng{authorfullhash}{c3ab3cd17af0c6ba62a4f996e42cb981}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2504.05295}
+      \field{title}{{Dion}: A Communication-Efficient Optimizer for Large Models}
+      \field{year}{2025}
+    \endentry
+    \entry{schedfree}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=a5551dfae979b8c2befb546fac59ffee}{%
+           family={Defazio},
+           familyi={D\bibinitperiod},
+           given={Aaron},
+           giveni={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{f0fba47996ba38f677e9c23faad43dea}
+      \strng{fullhash}{f0fba47996ba38f677e9c23faad43dea}
+      \strng{bibnamehash}{f0fba47996ba38f677e9c23faad43dea}
+      \strng{authorbibnamehash}{f0fba47996ba38f677e9c23faad43dea}
+      \strng{authornamehash}{f0fba47996ba38f677e9c23faad43dea}
+      \strng{authorfullhash}{f0fba47996ba38f677e9c23faad43dea}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2405.15682}
+      \field{title}{The Road Less Scheduled}
+      \field{year}{2024}
+    \endentry
+    \entry{srbf16}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2502.20566}
+      \field{title}{Stochastic Rounding for {AdamW} in {bf16}}
+      \field{year}{2025}
+    \endentry
+    \entry{deepseek_v4}{misc}{}
+      \name{author}{1}{}{%
+        {{hash=d597faee5c847cfbb2346d3b8725ba38}{%
+           family={{DeepSeek-AI}},
+           familyi={D\bibinitperiod}}}%
+      }
+      \strng{namehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{fullhash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{bibnamehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{authorbibnamehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{authornamehash}{d597faee5c847cfbb2346d3b8725ba38}
+      \strng{authorfullhash}{d597faee5c847cfbb2346d3b8725ba38}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{DeepSeek-V4} Technical Report}
+      \field{year}{2026}
+    \endentry
+    \entry{power_scheduler}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2408.13359}
+      \field{title}{Power Scheduler: A Batch-Size-Invariant Learning-Rate Scheduler}
+      \field{year}{2024}
+    \endentry
+    \entry{shortformer}{article}{}
+      \name{author}{3}{}{%
+        {{hash=b9d9adacad2d6080196f6d02f94ef54d}{%
+           family={Press},
+           familyi={P\bibinitperiod},
+           given={Ofir},
+           giveni={O\bibinitperiod}}}%
+        {{hash=76caee508bed7d0995f7c21cc5e6208c}{%
+           family={Smith},
+           familyi={S\bibinitperiod},
+           given={Noah\bibnamedelima A.},
+           giveni={N\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=c97f53fdeeb04c28de19e3324cb4bc0a}{%
+           family={Lewis},
+           familyi={L\bibinitperiod},
+           given={Mike},
+           giveni={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{7a384357e2b8a489d3e41c24768473d7}
+      \strng{fullhash}{7a384357e2b8a489d3e41c24768473d7}
+      \strng{bibnamehash}{7a384357e2b8a489d3e41c24768473d7}
+      \strng{authorbibnamehash}{7a384357e2b8a489d3e41c24768473d7}
+      \strng{authornamehash}{7a384357e2b8a489d3e41c24768473d7}
+      \strng{authorfullhash}{7a384357e2b8a489d3e41c24768473d7}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2108.06084}
+      \field{title}{{Shortformer}: Better Language Modeling Using Shorter Inputs}
+      \field{year}{2021}
+    \endentry
+    \entry{ssmax}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2501.19399}
+      \field{title}{Scalable-Softmax Is Superior for Attention}
+      \field{year}{2025}
+    \endentry
+    \entry{gqa}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=c9e841fff6d89d0371c79b8b1eabe203}{%
+           family={Ainslie},
+           familyi={A\bibinitperiod},
+           given={Joshua},
+           giveni={J\bibinitperiod}}}%
+      }
+      \strng{namehash}{3cd79115a61b5d67c242c6b1f4c1aa0a}
+      \strng{fullhash}{3cd79115a61b5d67c242c6b1f4c1aa0a}
+      \strng{bibnamehash}{3cd79115a61b5d67c242c6b1f4c1aa0a}
+      \strng{authorbibnamehash}{3cd79115a61b5d67c242c6b1f4c1aa0a}
+      \strng{authornamehash}{3cd79115a61b5d67c242c6b1f4c1aa0a}
+      \strng{authorfullhash}{3cd79115a61b5d67c242c6b1f4c1aa0a}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2305.13245}
+      \field{title}{{GQA}: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints}
+      \field{year}{2023}
+    \endentry
+    \entry{selective_attn}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2410.02703}
+      \field{title}{Selective Attention Improves Transformer}
+      \field{year}{2024}
+    \endentry
+    \entry{registers}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2309.16588}
+      \field{title}{Vision Transformers Need Registers}
+      \field{year}{2023}
+    \endentry
+    \entry{dyt}{article}{}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2503.10622}
+      \field{title}{Dynamic Tanh: Replacing Layer-Norm with a Cheaper Pre-Activation}
+      \field{year}{2025}
+    \endentry
+    \entry{xielu}{article}{}
+      \name{author}{1}{}{%
+        {{hash=a2fe9051fe051f819bd739ef3e340377}{%
+           family={NVIDIA},
+           familyi={N\bibinitperiod}}}%
+      }
+      \strng{namehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{fullhash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{bibnamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authorbibnamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authornamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authorfullhash}{a2fe9051fe051f819bd739ef3e340377}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2411.13010}
+      \field{title}{{xIELU}: Trainable Piecewise Activation}
+      \field{year}{2024}
+    \endentry
+    \entry{hourglass}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=e9c0656f438e3ba65776cba04e7747aa}{%
+           family={Nawrot},
+           familyi={N\bibinitperiod},
+           given={Piotr},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{377b5fca9ffaeb081a8bd6d3f0d11ad8}
+      \strng{fullhash}{377b5fca9ffaeb081a8bd6d3f0d11ad8}
+      \strng{bibnamehash}{377b5fca9ffaeb081a8bd6d3f0d11ad8}
+      \strng{authorbibnamehash}{377b5fca9ffaeb081a8bd6d3f0d11ad8}
+      \strng{authornamehash}{377b5fca9ffaeb081a8bd6d3f0d11ad8}
+      \strng{authorfullhash}{377b5fca9ffaeb081a8bd6d3f0d11ad8}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2110.13711}
+      \field{title}{Hierarchical Transformers Are More Efficient Language Models}
+      \field{year}{2021}
+    \endentry
+    \entry{stochastic_depth}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=0d12f90a1d1945cb1b98f583c9dc9572}{%
+           family={Huang},
+           familyi={H\bibinitperiod},
+           given={Gao},
+           giveni={G\bibinitperiod}}}%
+      }
+      \strng{namehash}{3dcda21c08021918fcbe6ecf2e003538}
+      \strng{fullhash}{3dcda21c08021918fcbe6ecf2e003538}
+      \strng{bibnamehash}{3dcda21c08021918fcbe6ecf2e003538}
+      \strng{authorbibnamehash}{3dcda21c08021918fcbe6ecf2e003538}
+      \strng{authornamehash}{3dcda21c08021918fcbe6ecf2e003538}
+      \strng{authorfullhash}{3dcda21c08021918fcbe6ecf2e003538}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:1603.09382}
+      \field{title}{Deep Networks with Stochastic Depth}
+      \field{year}{2016}
+    \endentry
+    \entry{mhc}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{3}{}{%
+        {{hash=e63c890d46cbd4706041cef78be38fa7}{%
+           family={Xie},
+           familyi={X\bibinitperiod},
+           given={Zhenda},
+           giveni={Z\bibinitperiod}}}%
+        {{hash=1d41b11667193fc2d6d720337c963955}{%
+           family={Wei},
+           familyi={W\bibinitperiod},
+           given={Yixuan},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=8e749f3ae973ee8cece249d1ad4f89e7}{%
+           family={Cao},
+           familyi={C\bibinitperiod},
+           given={Huanqi},
+           giveni={H\bibinitperiod}}}%
+      }
+      \strng{namehash}{dcdbe98f9a90c691a2d83f4c36f7598f}
+      \strng{fullhash}{dcdbe98f9a90c691a2d83f4c36f7598f}
+      \strng{bibnamehash}{dcdbe98f9a90c691a2d83f4c36f7598f}
+      \strng{authorbibnamehash}{dcdbe98f9a90c691a2d83f4c36f7598f}
+      \strng{authornamehash}{dcdbe98f9a90c691a2d83f4c36f7598f}
+      \strng{authorfullhash}{dcdbe98f9a90c691a2d83f4c36f7598f}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2512.24880}
+      \field{title}{{mHC}: Manifold-Constrained Hyper-Connections}
+      \field{year}{2025}
+    \endentry
+    \entry{mudd_residual}{article}{}
+      \name{author}{1}{}{%
+        {{hash=0d83438ac71946158c69addb72c3bd0d}{%
+           family={Lin},
+           familyi={L\bibinitperiod},
+           given={et\bibnamedelima al.},
+           giveni={e\bibinitperiod\bibinitdelim a\bibinitperiod}}}%
+      }
+      \strng{namehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{fullhash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{bibnamehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{authorbibnamehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{authornamehash}{0d83438ac71946158c69addb72c3bd0d}
+      \strng{authorfullhash}{0d83438ac71946158c69addb72c3bd0d}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint}
+      \field{note}{Implementation referenced from \url{https://github.com/Lisennlp/modded-nanogpt} fork.}
+      \field{title}{{MUDD}: Multiway Dynamic Dense Connections for Transformer Residual Streams}
+      \field{year}{2025}
+    \endentry
+    \entry{ibrahim_cpt}{article}{}
+      \name{author}{8}{}{%
+        {{hash=ee9cabcb17e7e89558a2a38543cd8024}{%
+           family={Ibrahim},
+           familyi={I\bibinitperiod},
+           given={Adam},
+           giveni={A\bibinitperiod}}}%
+        {{hash=69ece8bb9e8c2a4e4e7f87344dac8cf0}{%
+           family={Thérien},
+           familyi={T\bibinitperiod},
+           given={Benjamin},
+           giveni={B\bibinitperiod}}}%
+        {{hash=d199400e2f670a6a30cf8f9d0299d1a7}{%
+           family={Gupta},
+           familyi={G\bibinitperiod},
+           given={Kshitij},
+           giveni={K\bibinitperiod}}}%
+        {{hash=5eefd4ba610d78bc53aad757371ad7bb}{%
+           family={Richter},
+           familyi={R\bibinitperiod},
+           given={Mats\bibnamedelima L.},
+           giveni={M\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
+        {{hash=00204a609640c9cd46edab1ca431940d}{%
+           family={Anthony},
+           familyi={A\bibinitperiod},
+           given={Quentin},
+           giveni={Q\bibinitperiod}}}%
+        {{hash=5df208e714096b2c067956b5334953cd}{%
+           family={Lesort},
+           familyi={L\bibinitperiod},
+           given={Timothée},
+           giveni={T\bibinitperiod}}}%
+        {{hash=482935b14917469a7e5f0bb7af05fdd7}{%
+           family={Belilovsky},
+           familyi={B\bibinitperiod},
+           given={Eugene},
+           giveni={E\bibinitperiod}}}%
+        {{hash=7711557abf7c3d508d1fa84cab27626e}{%
+           family={Rish},
+           familyi={R\bibinitperiod},
+           given={Irina},
+           giveni={I\bibinitperiod}}}%
+      }
+      \strng{namehash}{e07b1c3eb990652efb9bab4c82861586}
+      \strng{fullhash}{c216467058c70f6d065e74f594f693d0}
+      \strng{bibnamehash}{e07b1c3eb990652efb9bab4c82861586}
+      \strng{authorbibnamehash}{e07b1c3eb990652efb9bab4c82861586}
+      \strng{authornamehash}{e07b1c3eb990652efb9bab4c82861586}
+      \strng{authorfullhash}{c216467058c70f6d065e74f594f693d0}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2403.08763}
+      \field{title}{Simple and Scalable Strategies to Continually Pre-train Large Language Models}
+      \field{year}{2024}
+    \endentry
+    \entry{radford_gpt2}{article}{}
+      \name{author}{6}{}{%
+        {{hash=a812c46caad94fc8701be37871f303ba}{%
+           family={Radford},
+           familyi={R\bibinitperiod},
+           given={Alec},
+           giveni={A\bibinitperiod}}}%
+        {{hash=495187f3a2c93ddb8083bd18a5702527}{%
+           family={Wu},
+           familyi={W\bibinitperiod},
+           given={Jeffrey},
+           giveni={J\bibinitperiod}}}%
+        {{hash=5c2f5c2e6d4a9ec8681377f8a8e5e6af}{%
+           family={Child},
+           familyi={C\bibinitperiod},
+           given={Rewon},
+           giveni={R\bibinitperiod}}}%
+        {{hash=63b32614460a4ab72dbbbbfe223220ea}{%
+           family={Luan},
+           familyi={L\bibinitperiod},
+           given={David},
+           giveni={D\bibinitperiod}}}%
+        {{hash=1e6adbf36ab730cd5fdadb838b4d2667}{%
+           family={Amodei},
+           familyi={A\bibinitperiod},
+           given={Dario},
+           giveni={D\bibinitperiod}}}%
+        {{hash=8d569d1d5b8b5a7836017a98b430f959}{%
+           family={Sutskever},
+           familyi={S\bibinitperiod},
+           given={Ilya},
+           giveni={I\bibinitperiod}}}%
+      }
+      \strng{namehash}{ca3baa5a22057195db1c71be39b4c922}
+      \strng{fullhash}{272bcacf72583dff08d1a2eedd467b89}
+      \strng{bibnamehash}{ca3baa5a22057195db1c71be39b4c922}
+      \strng{authorbibnamehash}{ca3baa5a22057195db1c71be39b4c922}
+      \strng{authornamehash}{ca3baa5a22057195db1c71be39b4c922}
+      \strng{authorfullhash}{272bcacf72583dff08d1a2eedd467b89}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{OpenAI technical report}
+      \field{title}{Language Models are Unsupervised Multitask Learners}
+      \field{year}{2019}
+    \endentry
+    \entry{codeparrot}{misc}{}
+      \name{author}{1}{}{%
+        {{hash=e0b6bb846c6a3e0649ce0e3cd9355df3}{%
+           family={{HuggingFace}},
+           familyi={H\bibinitperiod}}}%
+      }
+      \strng{namehash}{e0b6bb846c6a3e0649ce0e3cd9355df3}
+      \strng{fullhash}{e0b6bb846c6a3e0649ce0e3cd9355df3}
+      \strng{bibnamehash}{e0b6bb846c6a3e0649ce0e3cd9355df3}
+      \strng{authorbibnamehash}{e0b6bb846c6a3e0649ce0e3cd9355df3}
+      \strng{authornamehash}{e0b6bb846c6a3e0649ce0e3cd9355df3}
+      \strng{authorfullhash}{e0b6bb846c6a3e0649ce0e3cd9355df3}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{\url{https://huggingface.co/datasets/codeparrot/codeparrot-clean}}
+      \field{title}{{codeparrot/codeparrot-clean}: a deduplicated {Python} code dataset}
+      \field{year}{2022}
+    \endentry
+    \entry{jindal_format}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=da99d5ce380335ac2daccab1edd0f960}{%
+           family={Jindal},
+           familyi={J\bibinitperiod},
+           given={Ishan},
+           giveni={I\bibinitperiod}}}%
+      }
+      \strng{namehash}{05a8f4961767d8addbfc7fdd5f4d183d}
+      \strng{fullhash}{05a8f4961767d8addbfc7fdd5f4d183d}
+      \strng{bibnamehash}{05a8f4961767d8addbfc7fdd5f4d183d}
+      \strng{authorbibnamehash}{05a8f4961767d8addbfc7fdd5f4d183d}
+      \strng{authornamehash}{05a8f4961767d8addbfc7fdd5f4d183d}
+      \strng{authorfullhash}{05a8f4961767d8addbfc7fdd5f4d183d}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint}
+      \field{title}{Forgetting or Format Collapse? Re-examining Catastrophic Forgetting in Instruction-Tuned LLMs}
+      \field{year}{2024}
+    \endentry
+    \entry{guo_stability_gap}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{1}{}{%
+        {{hash=ab003ba0cde746f34621f109788f5d5e}{%
+           family={Guo},
+           familyi={G\bibinitperiod},
+           given={Yiduo},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \strng{namehash}{d9fb3ac8cf2ccd8ca760e4cf53f65536}
+      \strng{fullhash}{d9fb3ac8cf2ccd8ca760e4cf53f65536}
+      \strng{bibnamehash}{d9fb3ac8cf2ccd8ca760e4cf53f65536}
+      \strng{authorbibnamehash}{d9fb3ac8cf2ccd8ca760e4cf53f65536}
+      \strng{authornamehash}{d9fb3ac8cf2ccd8ca760e4cf53f65536}
+      \strng{authorfullhash}{d9fb3ac8cf2ccd8ca760e4cf53f65536}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2406.14833}
+      \field{title}{Efficient Continual Pre-training by Mitigating the Stability Gap}
+      \field{year}{2024}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

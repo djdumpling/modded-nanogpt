@@ -1,0 +1,167 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\abx@aux@refcontext{none/global//global/global}
+\abx@aux@cite{0}{jordan_modded_nanogpt}
+\abx@aux@segm{0}{0}{jordan_modded_nanogpt}
+\abx@aux@cite{0}{xsa_zhai}
+\abx@aux@segm{0}{0}{xsa_zhai}
+\abx@aux@cite{0}{muon_jordan}
+\abx@aux@segm{0}{0}{muon_jordan}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Background and goal}{1}{section.1}\protected@file@percent }
+\newlabel{sec:bg}{{1}{1}{Background and goal}{section.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Baselines we measured (all on 8\(\times \)H200, n=10 each).}{1}{section*.1}\protected@file@percent }
+\abx@aux@cite{0}{muon_jordan}
+\abx@aux@segm{0}{0}{muon_jordan}
+\abx@aux@cite{0}{cmuon}
+\abx@aux@segm{0}{0}{cmuon}
+\abx@aux@cite{0}{adamuon}
+\abx@aux@segm{0}{0}{adamuon}
+\abx@aux@cite{0}{ademamix}
+\abx@aux@segm{0}{0}{ademamix}
+\abx@aux@cite{0}{dion}
+\abx@aux@segm{0}{0}{dion}
+\abx@aux@cite{0}{schedfree}
+\abx@aux@segm{0}{0}{schedfree}
+\abx@aux@cite{0}{srbf16}
+\abx@aux@segm{0}{0}{srbf16}
+\abx@aux@cite{0}{deepseek_v4}
+\abx@aux@segm{0}{0}{deepseek_v4}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Methodology}{2}{section.2}\protected@file@percent }
+\newlabel{sec:method}{{2}{2}{Methodology}{section.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}What didn't work}{2}{section.3}\protected@file@percent }
+\newlabel{sec:fail}{{3}{2}{What didn't work}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Optimizer changes}{2}{subsection.3.1}\protected@file@percent }
+\abx@aux@cite{0}{power_scheduler}
+\abx@aux@segm{0}{0}{power_scheduler}
+\abx@aux@cite{0}{shortformer}
+\abx@aux@segm{0}{0}{shortformer}
+\abx@aux@cite{0}{ssmax}
+\abx@aux@segm{0}{0}{ssmax}
+\abx@aux@cite{0}{gqa}
+\abx@aux@segm{0}{0}{gqa}
+\abx@aux@cite{0}{selective_attn}
+\abx@aux@segm{0}{0}{selective_attn}
+\abx@aux@cite{0}{deepseek_v4}
+\abx@aux@segm{0}{0}{deepseek_v4}
+\abx@aux@cite{0}{registers}
+\abx@aux@segm{0}{0}{registers}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Schedule and curriculum}{3}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Attention and value-stream changes}{3}{subsection.3.3}\protected@file@percent }
+\abx@aux@cite{0}{dyt}
+\abx@aux@segm{0}{0}{dyt}
+\abx@aux@cite{0}{xielu}
+\abx@aux@segm{0}{0}{xielu}
+\abx@aux@cite{0}{hourglass}
+\abx@aux@segm{0}{0}{hourglass}
+\abx@aux@cite{0}{stochastic_depth}
+\abx@aux@segm{0}{0}{stochastic_depth}
+\abx@aux@cite{0}{mhc}
+\abx@aux@segm{0}{0}{mhc}
+\abx@aux@cite{0}{xsa_zhai}
+\abx@aux@segm{0}{0}{xsa_zhai}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Architectural and capacity changes}{4}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Systems and infrastructure}{4}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}What did work: the XSA path}{5}{section.4}\protected@file@percent }
+\newlabel{sec:xsa}{{4}{5}{What did work: the XSA path}{section.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{First attempt (\texttt  {\small  exp/xsa}, layer set $\{7,8,10\}$).}{5}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step 2: make it learnable (\texttt  {\small  exp/xsa-gated}).}{5}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Diagnostics (\texttt  {\small  exp/xsa-gated-diag}).}{5}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Negative ablation: pruning layer 8 (\texttt  {\small  exp/xsa-gated-prune-layer-8}).}{5}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step 3: broaden to all non-paired layers (\texttt  {\small  exp/xsa-gated-more-layers}).}{5}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step 4: spend the headroom (\texttt  {\small  exp/xsa-gated-1410}).}{5}{section*.7}\protected@file@percent }
+\abx@aux@cite{0}{mudd_residual}
+\abx@aux@segm{0}{0}{mudd_residual}
+\@writefile{toc}{\contentsline {section}{\numberline {5}The world record submission}{6}{section.5}\protected@file@percent }
+\newlabel{sec:wr}{{5}{6}{The world record submission}{section.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why the cost is small.}{6}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Why zero-init mattered.}{6}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Where the alphas grew.}{6}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}What we tried after the record}{6}{section.6}\protected@file@percent }
+\newlabel{sec:after}{{6}{6}{What we tried after the record}{section.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {\small  exp/xsa-mudd}: stack MUDD dense skips on Gated XSA.}{6}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {\small  exp/xsa-mudd-1360}: spend the MUDD headroom on more steps.}{6}{section*.12}\protected@file@percent }
+\abx@aux@cite{0}{ibrahim_cpt}
+\abx@aux@segm{0}{0}{ibrahim_cpt}
+\@writefile{toc}{\contentsline {paragraph}{Other branches that may have legs.}{7}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}What we wish we'd known earlier}{7}{section.7}\protected@file@percent }
+\newlabel{sec:lessons}{{7}{7}{What we wish we'd known earlier}{section.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{7}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Reproducing the result.}{7}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Addendum: a continual-pretraining side experiment}{7}{section.9}\protected@file@percent }
+\newlabel{sec:cpt}{{9}{7}{Addendum: a continual-pretraining side experiment}{section.9}{}}
+\abx@aux@cite{0}{radford_gpt2}
+\abx@aux@segm{0}{0}{radford_gpt2}
+\abx@aux@cite{0}{codeparrot}
+\abx@aux@segm{0}{0}{codeparrot}
+\@writefile{toc}{\contentsline {paragraph}{Headline.}{8}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1}Setup}{8}{subsection.9.1}\protected@file@percent }
+\newlabel{sec:cpt-setup}{{9.1}{8}{Setup}{subsection.9.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2}Results}{8}{subsection.9.2}\protected@file@percent }
+\newlabel{sec:cpt-results}{{9.2}{8}{Results}{subsection.9.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Continual-pretraining results across the 2\(\times \)2 design. Top row: per-step web-NLL (forgetting) and code-NLL (adaptation) trajectories for each condition. Bottom: Pareto plot of $(\Delta _{\text  {web}}, \Delta _{\text  {code}})$ end-of-run values; the bottom-left corner is best. Three seeds per condition; shaded regions are min/max envelopes.\relax }}{8}{figure.caption.16}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:cpt-main}{{1}{8}{Continual-pretraining results across the 2\(\times \)2 design. Top row: per-step web-NLL (forgetting) and code-NLL (adaptation) trajectories for each condition. Bottom: Pareto plot of $(\Delta _{\text {web}}, \Delta _{\text {code}})$ end-of-run values; the bottom-left corner is best. Three seeds per condition; shaded regions are min/max envelopes.\relax }{figure.caption.16}{}}
+\@writefile{toc}{\contentsline {paragraph}{Numerical summary (mean over 3 seeds; std in parentheses).}{8}{section*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Findings.}{9}{section*.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Statistical significance.}{9}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Reading the table.}{9}{section*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Bottom line.}{9}{section*.21}\protected@file@percent }
+\abx@aux@cite{0}{ibrahim_cpt}
+\abx@aux@segm{0}{0}{ibrahim_cpt}
+\abx@aux@cite{0}{jindal_format}
+\abx@aux@segm{0}{0}{jindal_format}
+\abx@aux@cite{0}{guo_stability_gap}
+\abx@aux@segm{0}{0}{guo_stability_gap}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3}How this differs from the Ibrahim et al.\ picture}{10}{subsection.9.3}\protected@file@percent }
+\newlabel{sec:cpt-compare}{{9.3}{10}{How this differs from the Ibrahim et al.\ picture}{subsection.9.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.4}What this does and does not show}{10}{subsection.9.4}\protected@file@percent }
+\newlabel{sec:cpt-limits}{{9.4}{10}{What this does and does not show}{subsection.9.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.5}Suggested follow-ups}{10}{subsection.9.5}\protected@file@percent }
+\newlabel{sec:cpt-followups}{{9.5}{10}{Suggested follow-ups}{subsection.9.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Reproducing the CPT result.}{10}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{11}{section*.23}\protected@file@percent }
+\abx@aux@read@bbl@mdfivesum{A54BC76E0CD5002374398D4D27A6BB6A}
+\abx@aux@defaultrefcontext{0}{jordan_modded_nanogpt}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{xsa_zhai}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{muon_jordan}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{cmuon}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{adamuon}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{ademamix}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{dion}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{schedfree}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{srbf16}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{deepseek_v4}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{power_scheduler}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{shortformer}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{ssmax}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{gqa}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{selective_attn}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{registers}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{dyt}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{xielu}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{hourglass}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{stochastic_depth}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{mhc}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{mudd_residual}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{ibrahim_cpt}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{radford_gpt2}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{codeparrot}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{jindal_format}{none/global//global/global}
+\abx@aux@defaultrefcontext{0}{guo_stability_gap}{none/global//global/global}
+\gdef \@abspage@last{12}
