@@ -1,17 +1,17 @@
 [0] Config.pm:307> INFO - This is Biber 2.17
 [0] Config.pm:310> INFO - Logfile is 'report.blg'
-[24] biber:340> INFO - === Wed May  6, 2026, 14:53:41
+[24] biber:340> INFO - === Thu May  7, 2026, 00:13:39
 [29] Biber.pm:418> INFO - Reading 'report.bcf'
-[52] Biber.pm:972> INFO - Found 15 citekeys in bib section 0
+[53] Biber.pm:972> INFO - Found 22 citekeys in bib section 0
 [57] Biber.pm:4383> INFO - Processing section 0
-[60] Biber.pm:4574> INFO - Looking for bibtex file 'refs.bib' for section 0
-[61] bibtex.pm:1713> INFO - LaTeX decoding ...
-[64] bibtex.pm:1518> INFO - Found BibTeX data source 'refs.bib'
-[87] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
-[87] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
-[87] Biber.pm:4203> INFO - Sorting list 'none/global//global/global' of type 'entry' with template 'none' and locale 'en-US'
-[87] Biber.pm:4209> INFO - No sort tailoring available for locale 'en-US'
-[89] bbl.pm:654> INFO - Writing 'report.bbl' with encoding 'UTF-8'
-[90] bbl.pm:757> INFO - Output to report.bbl
-[91] Biber.pm:130> WARN - legacy year field '2024--2026' in entry 'jordan_modded_nanogpt' is not an integer - this will probably not sort properly.
-[91] Biber.pm:132> INFO - WARNINGS: 1
+[61] Biber.pm:4574> INFO - Looking for bibtex file 'refs.bib' for section 0
+[62] bibtex.pm:1713> INFO - LaTeX decoding ...
+[66] bibtex.pm:1518> INFO - Found BibTeX data source 'refs.bib'
+[101] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[101] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[101] Biber.pm:4203> INFO - Sorting list 'none/global//global/global' of type 'entry' with template 'none' and locale 'en-US'
+[101] Biber.pm:4209> INFO - No sort tailoring available for locale 'en-US'
+[105] bbl.pm:654> INFO - Writing 'report.bbl' with encoding 'UTF-8'
+[107] bbl.pm:757> INFO - Output to report.bbl
+[107] Biber.pm:130> WARN - legacy year field '2024--2026' in entry 'jordan_modded_nanogpt' is not an integer - this will probably not sort properly.
+[108] Biber.pm:132> INFO - WARNINGS: 1

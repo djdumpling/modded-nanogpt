@@ -1,13 +1,12 @@
 # Fdb version 3
-["biber report"] 1778079220 "report.bcf" "report.bbl" "report" 1778079415
-  "refs.bib" 1778043909 3131 db707a9f1e72213a081a42260fe6cc36 ""
-  "report.bcf" 1778079415 107798 ce1d3b3129887dedc25e2b7c5fafed6a "pdflatex"
+["biber report"] 1778112819 "report.bcf" "report.bbl" "report" 1778112821
+  "refs.bib" 1778112797 4555 bf7ddcd158a1d382af25ac116846abc2 ""
+  "report.bcf" 1778112820 108510 586d0426ce66f775d361d0256ee549ec "pdflatex"
   (generated)
   "report.bbl"
   "report.blg"
-["pdflatex"] 1778079415 "/home/yale/class_projects/nanogpt-alex-andrew-ben/report/report.tex" "report.pdf" "report" 1778079415
+["pdflatex"] 1778112820 "report.tex" "report.pdf" "report" 1778112821
   "/etc/texmf/web2c/texmf.cnf" 1777622007 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/home/yale/class_projects/nanogpt-alex-andrew-ben/report/report.tex" 1778079395 23440 32919614c19a1420f74d16fb69fb528c ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/tcrm1000.tfm" 1136768653 1536 e07581a4bb3136ece9eeb4c3ffab8233 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm" 1246382020 1004 54797486969f23fa377b128694d548df ""
@@ -148,11 +147,11 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1644012257 39432 7155514e09a3d69036fac785183a21c2 ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1778078219 362444 d082a522277925383c40fd9e80e279fd ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1777622012 1435977 dd3c39b599f04225f112c757956c8bb7 ""
-  "report.aux" 1778079415 7051 895f8857455b12ffa2a003fe04533902 "pdflatex"
-  "report.bbl" 1778079221 9342 7b2cd0ccb6d36368622da6709ad52757 "biber report"
-  "report.out" 1778079415 2353 d4b74930f77556bf23f4585827b3455c "pdflatex"
-  "report.run.xml" 1778079415 2313 71764d4a9a10ed8a3ba4ca1c3500a605 "pdflatex"
-  "report.tex" 1778079395 23440 32919614c19a1420f74d16fb69fb528c ""
+  "report.aux" 1778112820 7904 de84bbeeb57a2b01753f2112c88ecfcf "pdflatex"
+  "report.bbl" 1778112819 16971 651fc0ce90e72378cba5155b50e67196 "biber report"
+  "report.out" 1778112820 2353 d4b74930f77556bf23f4585827b3455c "pdflatex"
+  "report.run.xml" 1778112820 2313 71764d4a9a10ed8a3ba4ca1c3500a605 "pdflatex"
+  "report.tex" 1778112780 28023 4d33919569bce7ab085deb135142c504 ""
   (generated)
   "report.aux"
   "report.bcf"

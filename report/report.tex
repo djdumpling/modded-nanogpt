@@ -76,57 +76,50 @@ Forty branches were created. Most became negative results. We group them by the 
 
 \subsection{Optimizer changes}
 The Muon~\cite{muon_jordan} side of the optimizer is heavily tuned, and most modifications regressed.
-\begin{itemize}[leftmargin=1.2em,itemsep=0pt]
-  \item \code{exp/c-muon}: cautious mask~\cite{cmuon} (sign-agreement gate) on the polar-express output. Conceptually free---one bitmask, no extra matmul---but did not move loss at $n=8$.
-  \item \code{exp/adamuon}: AdaMuon~\cite{adamuon} element-wise variance adaptation overlaid on NorMuon. The bf16 variance buffer added memory traffic; loss flat, wall slightly worse.
-  \item \code{exp/per-head-normuon}: redistribute NorMuon's per-axis EMA step-size budget across heads on the QK bank. No measurable signal.
-  \item \code{exp/hyperball-adam}: pin \code{lm\_head} Frobenius norm at its initial value (replacing weight decay). Mild loss regression.
-  \item \code{exp/ademamix}: AdEMAMix~\cite{ademamix} two-EMA Adam variant for the embedding/scalar bank. The slow EMA needs many more steps than this 1500-step regime allows; losing.
-  \item \code{exp/dion}, \code{exp/scion-adam-leg}, \code{exp/schedule-free-adam}: each replaced or augmented an optimizer leg; none beat the existing Muon+NorMuon+Adam mix.
-  \item \code{exp/sr-bf16-adam}: store Adam moments in bf16 with stochastic rounding~\cite{srbf16}. Halves optimizer-state memory and reduces all-gather traffic. We saw a small wall-clock win but a $\sim$0.001-nat loss regression that ate the gain.
-  \item \code{exp/dsv4-newton-schulz}: swap Polar Express for the DeepSeek-V4 hybrid 8+2 Newton-Schulz schedule~\cite{deepseek_v4}. Net loss regression at iso-step.
+\begin{itemize}[leftmargin=1.2em,itemsep=4pt]
+  \item \code{exp/c-muon}: cautious mask~\cite{cmuon} (sign-agreement gate between the raw gradient and the polar-express output) zeroes updates where the orthogonalized direction disagrees with the gradient. Conceptually free---one bitmask, no extra matmul---and at larger scales it has been reported to help, but in this 1500-step regime the disagreement rate is low enough that masking gave no measurable signal at $n=8$.
+  \item \code{exp/adamuon}: AdaMuon~\cite{adamuon} layers Adam-style element-wise variance adaptation \emph{after} Muon's orthogonalization, on the theory that per-coordinate scaling is still useful even when directions are normalized. The bf16 variance buffer adds memory traffic that Muon was specifically designed to avoid; loss came in flat, wall slightly worse---the variance signal didn't pay for the bandwidth.
+  \item \code{exp/ademamix}: AdEMAMix~\cite{ademamix} replaces Adam's single EMA with a fast/slow pair, the slow one capturing low-frequency gradient structure. We applied it on the embedding/scalar bank, where Adam already lives. The slow EMA's $\beta_2 \approx 0.9999$ needs many more steps than this 1500-step regime allows to be informative; the slow leg behaved like a stale momentum buffer.
+  \item \code{exp/dion}: Dion~\cite{dion} is a communication-efficient optimizer that decomposes weight updates into low-rank components to reduce all-gather traffic. We replaced the Adam leg with Dion on a subset of parameters; the comm savings were real but a small loss regression appeared, suggesting the low-rank constraint matters more in this small-model regime than at scale.
+  \item \code{exp/schedule-free-adam}: schedule-free optimization~\cite{schedfree} eliminates the LR cooldown via Polyak-style averaging, with a single warmup-only schedule. Attractive because cooldown shape is a tuning headache. In our regime the cooldown is doing real work---removing it cost more loss headroom than the schedule simplification was worth.
+  \item \code{exp/sr-bf16-adam}: store Adam moments in bf16 with stochastic rounding~\cite{srbf16}. Halves optimizer-state memory and reduces all-gather traffic; the stochastic rounding is supposed to preserve unbiased moment estimates despite the precision drop. We saw a small wall-clock win but a $\sim$0.001-nat loss regression that ate the gain---the rounding noise interacts badly with the very small step sizes near cooldown end.
+  \item \code{exp/dsv4-newton-schulz}: swap Polar Express for the DeepSeek-V4~\cite{deepseek_v4} hybrid 8+2 Newton-Schulz schedule, which uses two extra correction iterations to converge to a tighter orthogonalization. The hypothesis is that better orthogonalization gives a cleaner update direction; net loss regression at iso-step suggests Polar Express was already past the useful precision threshold for this batch size.
 \end{itemize}
 
 \subsection{Schedule and curriculum}
-\begin{itemize}[leftmargin=1.2em,itemsep=0pt]
-  \item \code{exp/adam-warmup}, \code{exp/adam-warmup-10}: short Adam-only LR warmup (50 / 10 steps). Inconsistent at $n=8$.
-  \item \code{exp/muon-lr-floor}: split Adam/Muon cooldown floors (0.15 / 0.80). No signal vs.\ master's shared 0.15 floor.
-  \item \code{exp/cwd-acceleration}: split Cautious Weight Decay into separate acceleration and decay coefficients. Flat.
-  \item \code{exp/power-scheduler}: power-law cooldown~\cite{power_scheduler} replacing the linear decay. Shape changes the time spent near peak LR but did not help in this regime.
-  \item \code{exp/seq-length-curriculum} and \code{exp/seq-curriculum-batch-bump}: shorter \code{train\_max\_seq\_len} on early stages, optionally with a stage-1 batch bump. The wall-clock gain we expected from cheaper varlen attention was eaten by recompiles and a slight loss regression.
-  \item \code{exp/leaky-relu-iter-sweep}: \code{NUM\_SCHEDULED\_ITERATIONS} env override for sweeping. Infra change, not a result.
+\begin{itemize}[leftmargin=1.2em,itemsep=4pt]
+  \item \code{exp/adam-warmup}, \code{exp/adam-warmup-10}: short Adam-only LR warmup (50 / 10 steps) on top of the existing Muon warmup, on the theory that Adam's variance estimate is noisier early than Muon's orthogonalized direction and benefits from a separate ramp. Inconsistent at $n=8$: signs flipped between seeds, so we couldn't claim either direction beyond noise.
+  \item \code{exp/muon-lr-floor}: split Adam/Muon cooldown floors (0.15 / 0.80) so Muon stays closer to its peak LR through cooldown, while Adam decays normally. Idea: orthogonalized updates are more robust to large step sizes than coordinate-wise ones. No signal vs.\ master's shared 0.15 floor---Muon was already at a good operating point.
+  \item \code{exp/cwd-acceleration}: split Cautious Weight Decay into separate acceleration and decay coefficients to control momentum-induced effective decay independently from the static term. Flat---the two coefficients ended up co-tuning, and the existing single coefficient was already near the joint optimum in our regime.
+  \item \code{exp/power-scheduler}: power-law cooldown~\cite{power_scheduler} replacing the linear decay, on the theory that a slower-than-linear shape spends more time near peak LR before collapsing. Shape did change the time-near-peak distribution but the bar in this regime is set by the very last few hundred steps, where both schedules are similar; no win.
+  \item \code{exp/seq-length-curriculum} and \code{exp/seq-curriculum-batch-bump}: shorter \code{train\_max\_seq\_len} on early stages (Shortformer-style~\cite{shortformer}), optionally with a stage-1 batch bump to recover token-throughput. Hope: cheaper varlen attention cost early when the model can't yet use long context anyway. The wall-clock gain was eaten by torch.compile recompiles at every shape transition, plus a slight loss regression from the abrupt window changes.
+  \item \code{exp/leaky-relu-iter-sweep}: \code{NUM\_SCHEDULED\_ITERATIONS} env-override knob to sweep iteration counts cheaply across other branches. Infrastructure, not an experimental claim---listed only for completeness because several downstream branches depend on it.
 \end{itemize}
 
 \subsection{Attention and value-stream changes}
-\begin{itemize}[leftmargin=1.2em,itemsep=0pt]
-  \item \code{exp/qk-gain}: per-(layer, head) learnable post-QK-norm gain. Identity-init, but the optimizer found no useful per-head temperature beyond YaRN's existing scale.
-  \item \code{exp/ssmax}: SSMax~\cite{ssmax} log-context attention scaling. Theoretically composes with the YaRN window schedule; empirically flat.
-  \item \code{exp/long-window-gqa}: GQA-by-averaging on long-window layers (3 and 10), 3:1 K/V $\to$ Q grouping. After fixing a bug where averaging happened \emph{before} rotary/value-embedding mixing, the corrected version was loss-neutral but gave us no wall-clock either (averaged tensors still have full per-head shape).
-  \item \code{exp/fox-gate}: FoX data-dependent forget-gate bias on long-window layers. Bf16-cast and doc/window mask issues; final version flat.
-  \item \code{exp/selective-attention}: parameter-free selective attention~\cite{selective_attn} on layer 10 only. After fixing three correctness bugs (acausal cumsum direction, missing doc mask, missing window mask), the materialized $(T,T)$ path made the layer too slow; loss signal alone could not justify the regression.
-  \item \code{exp/attn-sink}: per-(layer, head) learnable attention sink (DeepSeek-V4 \S2.3.3~\cite{deepseek_v4}). Loss neutral.
-  \item \code{exp/register-tokens}: 4 learnable BOS-position offsets~\cite{registers}. Composes with the existing BOS-alignment recipe but added no loss headroom.
-  \item \code{exp/rotating-dim-sweep}: parameterize the RoPE partial-rotation dim (32, 48, 64, 80, 96). The default $head\_dim/2 = 64$ remained best.
+\begin{itemize}[leftmargin=1.2em,itemsep=4pt]
+  \item \code{exp/qk-gain}: per-(layer, head) learnable post-QK-norm gain, identity-initialized. Hypothesis: heads benefit from independent attention temperatures, and the existing YaRN scale sets only a global one. The optimizer pushed every head's gain back toward 1.0 and stayed there---YaRN's per-position scale already covers the temperature freedom we expected to find.
+  \item \code{exp/ssmax}: SSMax~\cite{ssmax} log-context attention scaling adds a $\log T$ multiplicative factor inside softmax to compensate for entropy growth with context length. Theoretically composes with the YaRN window schedule, since both target the same dilution problem from different angles. Empirically flat---YaRN was already absorbing the signal SSMax would have provided.
+  \item \code{exp/long-window-gqa}: GQA~\cite{gqa}-by-averaging on long-window layers (3 and 10) with 3:1 K/V $\to$ Q grouping, intended to cut KV-cache and projection costs on the most expensive attention layers. After fixing a bug where averaging happened \emph{before} rotary/value-embedding mixing, the corrected version was loss-neutral but the averaged tensors still have full per-head shape downstream, so we got no wall-clock either.
+  \item \code{exp/selective-attention}: parameter-free selective attention~\cite{selective_attn} on layer 10 only, which subtracts an acausal cumulative-attention term from the logits to suppress repeated-token mass. After fixing three correctness bugs (acausal cumsum direction, missing doc mask, missing window mask), the materialized $(T,T)$ path made the layer too slow; the loss signal alone could not justify the wall-clock regression.
+  \item \code{exp/attn-sink}: per-(layer, head) learnable attention sink (DeepSeek-V4 \S2.3.3~\cite{deepseek_v4}), an extra logit position that tokens can attend to when they want to ``attend nowhere.'' Conjectured to free up attention bandwidth for real tokens. Loss neutral---the BOS token is already serving this role through the existing alignment recipe.
+  \item \code{exp/register-tokens}: 4 learnable BOS-position offsets~\cite{registers} that act as register slots for global state, originally proposed for ViTs to absorb high-norm artifact tokens. Composes cleanly with the existing BOS-alignment recipe. Added no loss headroom---in this short-context regime the BOS-only setup already provides enough register capacity.
+  \item \code{exp/rotating-dim-sweep}: parameterize the RoPE partial-rotation dim across $\{32, 48, 64, 80, 96\}$, since the partial-rotation choice is one of the few remaining attention hyperparameters not heavily tuned. Hypothesis was that the cooldown's softer LR could exploit a different fraction. The default $head\_dim/2 = 64$ remained best at $n=8$.
 \end{itemize}
 
 \subsection{Architectural and capacity changes}
-\begin{itemize}[leftmargin=1.2em,itemsep=0pt]
-  \item \code{exp/dyt}: Dynamic Tanh~\cite{dyt} at pre-attn and pre-MLP norms. Flat to slightly negative.
-  \item \code{exp/xielu}: xIELU activation~\cite{xielu} with per-layer learnable $\alpha_p,\alpha_n$, eventually with a fused Triton kernel. Same loss as ReLU\(^2\) at slightly worse wall-clock.
-  \item \code{exp/leaky-relu-spectral-init}: LeakyReLU($\alpha$)\(^2\) MLP plus an overtone power-law spectral \code{lm\_head} init. Two ideas in one branch; signal too noisy at $n=8$ to justify either.
-  \item \code{exp/hourglass-ffn}: shrink MLP inner dim from $4d$ to $2d$. Wall-clock improvement, loss regression, no net.
-  \item \code{exp/progressive-depth}: gate top layers off early in training, phase in later. The compiled graph still ran the gated layers at full cost (\code{torch.compile} doesn't dead-code-eliminate buffers), so we measured loss only; even there it was flat.
-  \item \code{exp/hmid-injection}: zero-init mid-network state injection into later layers. Flat.
-  \item \code{exp/per-token-resid-lambda}, \code{exp/backout-mlp-gate}: per-token sigmoid gates around residual lambdas / backout. Both no-op-init; both flat.
-  \item \code{exp/mhc}: minimal $n_{hc}=2$ manifold-constrained hyper-connections, zero-init via lane-0 dominance. Flat.
-  \item \code{exp/mudd-residual}: per-token gated dense skips into layers 9 and 10 (residual channel). Not promising on its own---but, kept warm; it would resurface (\S\ref{sec:after}).
+\begin{itemize}[leftmargin=1.2em,itemsep=4pt]
+  \item \code{exp/dyt}: Dynamic Tanh~\cite{dyt} replaces RMSNorm with $\tanh(\alpha x)$ at pre-attn and pre-MLP norms, on the theory that the normalization step is doing double duty as a soft cap and a tanh achieves the cap directly without the rsqrt. Flat to slightly negative loss in our regime---RMSNorm's adaptive scale appears to matter more than its cost suggests.
+  \item \code{exp/xielu}: xIELU activation~\cite{xielu} with per-layer learnable $\alpha_p,\alpha_n$, eventually with a fused Triton kernel to recover the per-step cost gap vs.\ ReLU$^2$. xIELU's smooth-but-unbounded shape was supposed to give cleaner gradients than the ReLU$^2$ piecewise. Same loss as ReLU$^2$ at slightly worse wall-clock---kernel fusion closed most but not all of the gap.
+  \item \code{exp/leaky-relu-spectral-init}: LeakyReLU($\alpha$)$^2$ MLP plus an overtone power-law spectral \code{lm\_head} init, where the eigenvalue spectrum is shaped to match the empirical singular-value distribution of the converged matrix. Two ideas stacked in one branch made attribution hard; combined signal was too noisy at $n=8$ to justify either independently.
+  \item \code{exp/hourglass-ffn}: shrink MLP inner dim from $4d$ to $2d$~\cite{hourglass}, on the theory that the FFN is over-parameterized for a 124M model and capacity can be reallocated to attention or extra steps. Wall-clock improvement of $\sim$2\,ms/step, but a clear loss regression---the $4d$ width is genuinely load-bearing in this regime.
+  \item \code{exp/progressive-depth}: stochastic-depth-style~\cite{stochastic_depth} layer gating that turns top layers off early in training and phases them in later, on the theory that early steps don't need full depth. The compiled graph still ran the gated layers at full cost (\code{torch.compile} doesn't dead-code-eliminate buffers), so the wall-clock saving never materialized; loss alone was flat.
+  \item \code{exp/mhc}: minimal $n_{hc}=2$ manifold-constrained hyper-connections~\cite{mhc}, zero-initialized via lane-0 dominance so the model is bit-identical to master at step 0 and the second hyper-connection ``lane'' grows only if the optimizer wants it. The optimizer didn't want it---loss flat across $n=8$. mHC's reported gains require depth and width regimes well beyond ours.
 \end{itemize}
 
 \subsection{Systems and infrastructure}
-\begin{itemize}[leftmargin=1.2em,itemsep=0pt]
-  \item \code{exp/cuda-graphs}: capture inductor in \code{reduce-overhead} mode. Compile-time win, no end-to-end speedup once warm.
-  \item \code{exp/lawa-wsm}: disable LR cooldown and merge checkpoints at final eval. Not robust at $n=8$; a small fluke can flip the average.
-  \item \code{exp/opt-overlap-investigation}: probe pipeline overlap between Muon and Adam steps. Diagnostic only.
+\begin{itemize}[leftmargin=1.2em,itemsep=4pt]
+  \item \code{exp/opt-overlap-investigation}: instrumentation branch that probes the pipeline overlap between the Muon orthogonalization step and the Adam update on the embedding/scalar bank, looking for stalls where one waits on the other. Diagnostic only---no code changes were intended; the result fed prioritization for other branches but was not itself an experimental claim.
 \end{itemize}
 
 The cumulative lesson from these failures: the master is tighter than it looks. About a third of these branches ``should have'' helped on paper, and several were direct ports of papers reporting big gains at larger scale. Most papers' wins evaporate when the harness is already running 1500 steps with a heavily tuned schedule and a 9 ms/step compute budget.
@@ -167,7 +160,7 @@ $|\alpha|$ max 0.961, mean 0.567, all 18 (layer, head) pairs ``active'' ($|\tanh
 
 \paragraph{Step 3: broaden to all non-paired layers (\code{exp/xsa-gated-more-layers}).} Up to this point XSA lived on the last three non-paired layers. We extended it to \emph{all} non-paired attention layers: $\{1,3,4,7,8,10\}$. Six layers, twelve heads each, 72 new scalar parameters. At $n=10$, this lifted the loss headroom enough to support a shorter schedule.
 
-\paragraph{Step 4: spend the headroom (\code{exp/xsa-gated-more-layers-fewer-steps}).} A 30-step cut on master alone over-shoots the 3.28 bar by 0.00375 nats; the broader gated XSA gave us about 0.0008 nats of headroom relative to master. We cut \code{num\_scheduled\_iterations} from 1440 to 1410 (with the existing 40 extension iters held fixed at 1450 total runtime steps). Wall-clock dropped to 79.85\,s; loss came in at 3.27865, comfortably under the bar.
+\paragraph{Step 4: spend the headroom (\code{exp/xsa-gated-1410}).} A 30-step cut on master alone over-shoots the 3.28 bar by 0.00375 nats; the broader gated XSA gave us about 0.0008 nats of headroom relative to master. We cut \code{num\_scheduled\_iterations} from 1440 to 1410 (with the existing 40 extension iters held fixed at 1450 total runtime steps). Wall-clock dropped to 79.85\,s; loss came in at 3.27865, comfortably under the bar.
 
 \section{The world record submission}
 \label{sec:wr}
